@@ -30,11 +30,11 @@ const apiFetch = async <T>(url: string, options?: RequestInit): Promise<T> => {
   }
 }
 
-export const fetchPlayers = async (): Promise<Player[]> => {
-  return apiFetch<Player[]>(`${apiBaseUrl}/playerload`)
+export async function fetchPlayers(): Promise<Player[]> {
+  return apiFetch<Player[]>(`${apiBaseUrl}/players`)
 }
 
-export const searchForPlayer = async (playerName: string): Promise<Player[]> => {
+export async function searchForPlayer(playerName: string): Promise<Player[]> {
   return apiFetch<Player[]>(`${apiBaseUrl}/search`, {
     method: 'POST',
     headers: {

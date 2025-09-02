@@ -31,7 +31,7 @@
             <v-icon size="18">mdi-magnify</v-icon>
           </template>
           <template #append-inner>
-            <v-progress-circular v-if="loading" size="16" width="2" indeterminate />
+            <v-progress-circular v-if="isPending" size="16" width="2" indeterminate />
           </template>
         </v-text-field>
 
@@ -67,6 +67,12 @@
                 </v-list-item>
               </template>
             </v-list>
+            <v-card-text
+              v-if="!filtered.length && !recentPlayers.length && !search.length"
+              class="text-center text-caption text-disabled py-4 px-6"
+            >
+              Start typing to search for players...
+            </v-card-text>
             <v-card-text v-else class="text-center text-caption text-disabled py-4 px-6">
               No players found in our database, press enter to search the Destiny API.
             </v-card-text>
@@ -80,12 +86,13 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { fetchPlayers, searchForPlayer } from '@/api/api/caldera-report-api'
-import type { Player } from '@/api/models'
+import { Player } from '@/api/models'
+import { useQuery } from '@tanstack/vue-query'
 
 const search = ref('')
 const selectedPlayer = ref<Player | null>(null)
 const allPlayers = ref<Player[]>([])
-const loading = ref(false)
+const loading = ref(false) // still used for ad-hoc remote search (Enter key)
 
 const menu = ref(false)
 const activeIndex = ref(-1)
@@ -100,11 +107,31 @@ const recentPlayers = ref<Player[]>([])
 
 const filtered = ref<Player[]>([])
 
-onMounted(async () => {
-  const players = await fetchPlayers()
-  allPlayers.value = players
+const {
+  data: playersData,
+  isPending,
+  isError,
+  error,
+} = useQuery({
+  queryKey: ['players'],
+  queryFn: fetchPlayers,
+  staleTime: 30 * 60_000,
+  refetchOnWindowFocus: false,
+})
+
+watch(playersData, (val) => {
+  if (val) {
+    allPlayers.value = val
+    runFilter()
+  }
+})
+
+onMounted(() => {
   if (ENABLE_RECENTS) loadRecents()
-  runFilter()
+  if (playersData.value && !allPlayers.value.length) {
+    allPlayers.value = playersData.value
+    runFilter()
+  }
   document.addEventListener('pointerdown', onOutsidePointer, true)
 })
 
