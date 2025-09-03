@@ -35,7 +35,7 @@ export async function fetchPlayers(): Promise<Player[]> {
 }
 
 export async function searchForPlayer(playerName: string): Promise<Player[]> {
-  return apiFetch<Player[]>(`${apiBaseUrl}/search`, {
+  return apiFetch<Player[]>(`${apiBaseUrl}/players/search`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
