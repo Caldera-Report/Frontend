@@ -8,6 +8,7 @@ export const usePlayers = () => {
     queryFn: fetchPlayers,
     staleTime: 30 * 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   })
 }
 
@@ -28,5 +29,6 @@ export const useSearchPlayer = () => {
         return merged
       })
     },
+    retry: 1,
   })
 }

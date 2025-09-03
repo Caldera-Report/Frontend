@@ -369,7 +369,7 @@ mark {
 }
 
 .header {
-  position: fixed;
+  position: relative;
   top: 0;
   left: 0;
   right: 0;
@@ -385,8 +385,8 @@ mark {
   align-items: center;
   justify-content: space-between;
   max-width: 1400px;
-  margin: 0 auto;
-  padding: 1rem 2rem;
+  margin: 0;
+  /*padding: 1rem 2rem;*/
   height: 80px;
 }
 
@@ -395,6 +395,7 @@ mark {
   align-items: center;
   gap: 1rem;
   min-width: 250px;
+  margin-right: auto;
 }
 
 .logo-container {
@@ -425,7 +426,8 @@ mark {
   display: flex;
   justify-content: center;
   max-width: 600px;
-  margin: 0 2rem;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .search-input {
