@@ -93,6 +93,8 @@
     timeout="5000"
     elevation="4"
     :multi-line="errorMessage.length > 60"
+    :close-on-content-click="true"
+    close-delay="5000"
   >
     {{ errorMessage }}
   </v-snackbar>
@@ -258,7 +260,9 @@ function selectPlayer(p: Player) {
   selectedPlayer.value = p
   addRecent(p)
   search.value = p.fullDisplayName || p.displayName
-  closeMenu()
+  const typeStr = p.membershipType.toString()
+  const idStr = p.id.toString()
+  window.location.href = `/player/${typeStr}/${idStr}`
 }
 
 async function onEnter() {

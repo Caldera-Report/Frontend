@@ -6,7 +6,7 @@ export const usePlayers = () => {
   return useQuery<Player[]>({
     queryKey: ['players'],
     queryFn: fetchPlayers,
-    staleTime: 30 * 60_000,
+    staleTime: 60 * 60_000,
     refetchOnWindowFocus: false,
     retry: false,
   })
