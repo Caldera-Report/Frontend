@@ -13,7 +13,7 @@ const router = createRouter({
       component: HomePage,
     },
     {
-      path: '/player/:membershipType/:membershipId',
+      path: '/player/:membershipId',
       name: 'Player',
       component: Player,
       props: true,
