@@ -18,13 +18,13 @@
   "dependencies": {
     "@mdi/font": "^7.4.47",
     "@microsoft/signalr": "^9.0.6",
-    "@tanstack/vue-query": "^5.85.9",
-    "@typescript-eslint/parser": "^8.41.0",
-    "typescript-eslint": "^8.41.0",
-    "vue": "^3.5.18",
+    "@tanstack/vue-query": "^5.87.4",
+    "@typescript-eslint/parser": "^8.43.0",
+    "typescript-eslint": "^8.43.0",
+    "vue": "^3.5.21",
     "vue-router": "^4.5.1",
-    "vuetify": "^3.9.6",
-    "zod": "^4.1.5"
+    "vuetify": "^3.10.0",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.2",
@@ -33,14 +33,14 @@
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.6.0",
     "@vue/tsconfig": "^0.7.0",
-    "eslint": "^9.34.0",
+    "eslint": "^9.35.0",
     "eslint-plugin-vue": "^10.4.0",
     "jiti": "^2.4.2",
     "npm-run-all2": "^8.0.4",
     "prettier": "3.6.2",
     "typescript": "^5.9.2",
-    "vite": "^7.1.4",
-    "vite-plugin-vue-devtools": "^8.0.0",
-    "vue-tsc": "^3.0.4"
+    "vite": "^7.1.5",
+    "vite-plugin-vue-devtools": "^8.0.2",
+    "vue-tsc": "^3.0.7"
   }
 }

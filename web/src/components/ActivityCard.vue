@@ -73,6 +73,7 @@ const props = defineProps<{
   activityName: string
   activityId: string
   playerId: string
+  ready?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -86,7 +87,11 @@ const {
   isError,
   error: loadError,
   refetch,
-} = usePlayerReportsForActivity(props.playerId, props.activityId)
+} = usePlayerReportsForActivity(
+  props.playerId,
+  props.activityId,
+  computed(() => !!props.ready),
+)
 
 function refreshReports() {
   console.log('Refreshing reports...')
@@ -116,7 +121,7 @@ const completedReports = computed(() => reportsSorted.value.filter((r) => r.comp
 const totalClears = computed(() => completedReports.value.length)
 
 function formatDurationDetailed(seconds: number | undefined) {
-  if (seconds == null || isNaN(seconds)) return '-'
+  if (seconds == null || isNaN(seconds) || seconds <= 0) return '-'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)

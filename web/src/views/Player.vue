@@ -26,12 +26,13 @@
           <div class="cards" v-if="player?.id">
             <ActivityCard
               ref="activityCards"
-              v-for="activity in flatActivities(opType)"
+              v-for="activity in sortedActivities(opType)"
               :key="activity.id"
               :image-url="'https://www.bungie.net' + activity.imageURL"
               :activity-name="activity.name"
               :activity-id="activity.id"
               :player-id="player.id"
+              :ready="isInitialUpdateDone"
               @select-report="onSelectReport"
             />
           </div>
@@ -43,15 +44,15 @@
 </template>
 
 <script setup lang="ts">
-import { useAllActivities, usePlayer } from '@/hooks'
+import { useAllActivities, usePlayer, useUpdatePlayerActivityReports } from '@/hooks'
 import { computed, ref, watch } from 'vue'
 import ErrorSnackbar from '@/components/ErrorSnackbar.vue'
 import ActivityCard from '@/components/ActivityCard.vue'
-import type { ActivityReportDTO } from '@/api/models'
+import type { ActivityReportDTO, ActivityDTO } from '@/api/models'
 
 const props = defineProps<{
-  membershipType: number
   membershipId: string
+  membershipType: number
 }>()
 
 type ActivityCardInstance = InstanceType<typeof ActivityCard>
@@ -61,6 +62,7 @@ const showErrorSnack = ref(false)
 const errorMessage = ref('')
 
 const selectedTab = ref(0)
+const isInitialUpdateDone = ref(false)
 
 const {
   data: activities,
@@ -76,9 +78,20 @@ const {
   error: playerError,
 } = usePlayer(props.membershipId, props.membershipType)
 
-const isPending = computed(() => isActivitiesPending.value || isPlayerPending.value)
-const isError = computed(() => isActivitiesError.value || isPlayerError.value)
-const error = computed(() => activitiesError.value || playerError.value)
+const {
+  mutateAsync: updatePlayerReports,
+  isPending: isUpdatePending,
+  isError: isUpdateError,
+  error: updateError,
+} = useUpdatePlayerActivityReports()
+
+const isPending = computed(
+  () => isActivitiesPending.value || isPlayerPending.value || isUpdatePending.value,
+)
+const isError = computed(
+  () => isActivitiesError.value || isPlayerError.value || isUpdateError.value,
+)
+const error = computed(() => activitiesError.value || playerError.value || updateError.value)
 
 watch([isError, errorMessage], ([errState, msg], [prevErrState]) => {
   if (errState && msg && (errState !== prevErrState || showErrorSnack.value === false)) {
@@ -91,20 +104,47 @@ function onSelectReport(report: ActivityReportDTO) {
   console.log('Selected report', report)
 }
 
-function flatActivities(opType: any) {
-  if (!opType?.activityTypes) return []
-  const result: any[] = []
-  for (const at of opType.activityTypes) {
-    if (at.activities) result.push(...at.activities)
-  }
-  return result
+function sortedActivities(opType: { activities?: ActivityDTO[] }) {
+  if (!opType.activities) return []
+  return [...opType.activities].sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
 }
 
-function handleRefresh() {
-  for (const c of activityCards.value) {
-    c?.requestRefresh?.()
+async function handleRefresh() {
+  if (!player?.value?.id) return
+  try {
+    errorMessage.value = ''
+    await updatePlayerReports(player.value.id)
+    isInitialUpdateDone.value = true
+  } catch (e) {
+    errorMessage.value = (e as Error)?.message || 'Failed to refresh player reports'
   }
 }
+
+const unwatchAutoRefresh = watch(
+  () => player.value?.id,
+  async (id) => {
+    if (!id) return
+    try {
+      errorMessage.value = ''
+      await updatePlayerReports(id)
+      isInitialUpdateDone.value = true
+    } catch (e) {
+      errorMessage.value = (e as Error)?.message || 'Failed to refresh player reports'
+    } finally {
+      unwatchAutoRefresh()
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => isUpdateError.value,
+  (v) => {
+    if (v && updateError.value) {
+      errorMessage.value = (updateError.value as Error).message || 'Failed to refresh'
+    }
+  },
+)
 </script>
 
 <style scoped>

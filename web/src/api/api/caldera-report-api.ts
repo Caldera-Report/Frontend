@@ -1,13 +1,19 @@
 import {
+  ActivityLoadResponseSchema,
   ActivityReportArraySchema,
+  CompletionsLeaderBoardResponseArraySchema,
   OpTypeArraySchema,
   PlayerArraySchema,
   PlayerSchema,
+  TimeLeaderBoardResponseArraySchema,
+  type ActivityLoadResponse,
   type ActivityReportDTO,
+  type CompletionsLeaderBoardResponse,
   type OpTypeDTO,
   type PlayerDTO,
+  type TimeLeaderBoardResponse,
 } from '../models/schemas'
-import { z, ZodError } from 'zod'
+import { ZodError } from 'zod'
 
 const apiBaseUrl = import.meta.env.API_BASE_URL || '/api'
 
@@ -84,12 +90,51 @@ export async function getPlayer(playerId: string, membershipType: number): Promi
   })
 }
 
-export async function GetPlayerReportsForActivity(
+export async function getPlayerReportsForActivity(
   playerId: string,
   activityId: string,
 ): Promise<ActivityReportDTO[]> {
   return apiFetch<ActivityReportDTO[]>({
     schema: ActivityReportArraySchema,
     url: `${apiBaseUrl}/players/${playerId}/stats/${activityId}`,
+  })
+}
+
+export async function updatePlayerActivityReports(playerId: string): Promise<ActivityLoadResponse> {
+  return apiFetch<ActivityLoadResponse>({
+    schema: ActivityLoadResponseSchema,
+    url: `${apiBaseUrl}/players/${playerId}/load`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  })
+}
+
+export async function getCompletionsLeaderboard(
+  activityId: string,
+): Promise<CompletionsLeaderBoardResponse[]> {
+  return apiFetch<CompletionsLeaderBoardResponse[]>({
+    schema: CompletionsLeaderBoardResponseArraySchema,
+    url: `${apiBaseUrl}/activities/leaderboards/completions/${activityId}`,
+  })
+}
+
+export async function getBestTimesLeaderboard(
+  activityId: string,
+): Promise<TimeLeaderBoardResponse[]> {
+  return apiFetch<TimeLeaderBoardResponse[]>({
+    schema: TimeLeaderBoardResponseArraySchema,
+    url: `${apiBaseUrl}/activities/leaderboards/speed/${activityId}`,
+  })
+}
+
+export async function getTotalTimeLeaderboard(
+  activityId: string,
+): Promise<TimeLeaderBoardResponse[]> {
+  return apiFetch<TimeLeaderBoardResponse[]>({
+    schema: TimeLeaderBoardResponseArraySchema,
+    url: `${apiBaseUrl}/activities/leaderboards/totalTime/${activityId}`,
   })
 }
