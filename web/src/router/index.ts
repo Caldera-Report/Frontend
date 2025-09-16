@@ -19,7 +19,7 @@ const router = createRouter({
       props: true,
     },
     {
-      path: '/activityreport/:id',
+      path: '/activityreport/:instanceId',
       name: 'ActivityReport',
       component: ActivityReport,
       props: true,
