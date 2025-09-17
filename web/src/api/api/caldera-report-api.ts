@@ -1,3 +1,4 @@
+import { calderaGet, calderaPost } from '../http/calderaClient'
 import {
   ActivityLoadResponseSchema,
   ActivityReportArraySchema,
@@ -64,19 +65,12 @@ const apiFetch = async <T>({ schema, url, init, mapError }: FetchOptions<T>): Pr
 }
 
 export async function fetchPlayers(): Promise<PlayerDTO[]> {
-  return apiFetch<PlayerDTO[]>({ schema: PlayerArraySchema, url: `${apiBaseUrl}/players` })
+  return calderaGet<PlayerDTO[]>('/players', { headers: { 'If-None-Match': '' } }) //I am now realizing I am an idiot and none of my etag stuff was working at all before, and certainly isn't now
+  //TODO: add working etag support, because I feel like it would be useful here
 }
 
 export async function searchForPlayer(playerName: string): Promise<PlayerDTO[]> {
-  return apiFetch<PlayerDTO[]>({
-    schema: PlayerArraySchema,
-    url: `${apiBaseUrl}/players/search`,
-    init: {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
-    },
-  })
+  return calderaPost<PlayerDTO[]>('/players/search', { playerName })
 }
 
 export async function getActivities(): Promise<OpTypeDTO[]> {

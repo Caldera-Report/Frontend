@@ -2,7 +2,10 @@ import type { HttpClient, HttpClientConfig } from 'bungie-api-ts/http'
 import { getPostGameCarnageReport } from 'bungie-api-ts/destiny2'
 
 const API_KEY = import.meta.env.VITE_BUNGIE_API_KEY
-const CONCURRENCY = 4
+const CONCURRENCY = 20 //I think this is the max allowed by bungie. Realistically a user should never hit this.
+if (!API_KEY) {
+  throw new Error('VITE_BUNGIE_API_KEY is not set')
+}
 let active = 0
 const queue: (() => void)[] = []
 function schedule<T>(fn: () => Promise<T>) {

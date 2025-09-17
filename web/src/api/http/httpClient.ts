@@ -40,7 +40,7 @@ export async function http<T = unknown>(url: string, opts: RequestOptions = {}):
   let attempt = 0
   for (;;) {
     const res = await fetch(url, init)
-    if (res.ok) {
+    if (res.ok || res.status === 304) {
       if (res.status === 204) return undefined as T
       return (await res.json()) as T
     }
