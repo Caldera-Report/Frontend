@@ -1,6 +1,6 @@
 import { http, type RequestOptions } from './httpClient'
 
-const RAW_BASE = import.meta.env.VITE_CALDERA_API_BASE ?? 'api'
+const RAW_BASE = import.meta.env.VITE_CALDERA_API_BASE ?? '/api'
 const BASE_URL = RAW_BASE.replace(/\/$/, '')
 
 function join(path: string) {

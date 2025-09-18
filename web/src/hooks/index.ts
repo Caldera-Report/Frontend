@@ -9,8 +9,10 @@ import {
   getBestTimesLeaderboard,
   getTotalTimeLeaderboard,
 } from '@/api/api/caldera-report-api'
+import { getPGCR } from '@/api/http/bungieClient'
 import type { ActivityReportDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
+import type { DestinyPostGameCarnageReportData } from 'bungie-api-ts/destiny2'
 import { unref, type Ref } from 'vue'
 
 export const usePlayers = () => {
@@ -130,6 +132,19 @@ export const useTotalTimeLeaderboard = (activityId: string | Ref<string>) => {
     queryKey: ['totalTimeLeaderboard', unref(activityId)],
     queryFn: () => getTotalTimeLeaderboard(unref(activityId)),
     staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
+}
+
+export const useActivityReport = (instanceId: string) => {
+  return useQuery<DestinyPostGameCarnageReportData>({
+    queryKey: ['activityReport', instanceId],
+    queryFn: async () => {
+      const response = await getPGCR(instanceId)
+      return response.Response
+    },
+    staleTime: 60 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
   })
