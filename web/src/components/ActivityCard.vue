@@ -185,6 +185,7 @@ function dotTooltip(r: ActivityReportDTO) {
 }
 
 function onSelect(r: ActivityReportDTO) {
+  window.location.href = `/activityreport/${r.instanceId}`
   emit('select-report', r)
 }
 

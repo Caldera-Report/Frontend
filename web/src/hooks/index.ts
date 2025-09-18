@@ -9,10 +9,14 @@ import {
   getBestTimesLeaderboard,
   getTotalTimeLeaderboard,
 } from '@/api/api/caldera-report-api'
-import { getPGCR } from '@/api/http/bungieClient'
+import { getPGCR, getSkullHashes } from '@/api/http/bungieClient'
 import type { ActivityReportDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import type { DestinyPostGameCarnageReportData } from 'bungie-api-ts/destiny2'
+import type {
+  DestinyActivitySelectableSkullCollectionDefinition,
+  DestinyActivitySkull,
+  DestinyPostGameCarnageReportData,
+} from 'bungie-api-ts/destiny2'
 import { unref, type Ref } from 'vue'
 
 export const usePlayers = () => {
@@ -144,7 +148,20 @@ export const useActivityReport = (instanceId: string) => {
       const response = await getPGCR(instanceId)
       return response.Response
     },
-    staleTime: 60 * 60_000,
+    staleTime: 'static',
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
+}
+
+export const useSkullHashes = () => {
+  return useQuery<DestinyActivitySelectableSkullCollectionDefinition[]>({
+    queryKey: ['skullHashes'],
+    queryFn: async () => {
+      const response = await getSkullHashes()
+      return Object.values(response) as DestinyActivitySelectableSkullCollectionDefinition[]
+    },
+    staleTime: 'static',
     refetchOnWindowFocus: false,
     retry: 1,
   })

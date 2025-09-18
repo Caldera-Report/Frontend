@@ -1,10 +1,14 @@
 import type { HttpClient, HttpClientConfig } from 'bungie-api-ts/http'
-import { getPostGameCarnageReport } from 'bungie-api-ts/destiny2'
+import {
+  getDestinyManifest,
+  getDestinyManifestComponent,
+  getPostGameCarnageReport,
+} from 'bungie-api-ts/destiny2'
 
 const API_KEY = import.meta.env.VITE_BUNGIE_API_KEY
 const CONCURRENCY = 20 //I think this is the max allowed by bungie. Realistically a user should never hit this.
 if (!API_KEY) {
-  throw new Error('VITE_BUNGIE_API_KEY is not set')
+  throw new Error('BUNGIE_API_KEY is not set')
 }
 let active = 0
 const queue: (() => void)[] = []
@@ -26,13 +30,13 @@ function schedule<T>(fn: () => Promise<T>) {
 
 export const bungieHttp: HttpClient = async <T>(config: HttpClientConfig): Promise<T> => {
   return schedule(async () => {
-    const url = new URL(`https://www.bungie.net${config.url}`)
+    const url = new URL(config.url)
     if (config.params) {
       for (const [k, v] of Object.entries(config.params)) {
         url.searchParams.set(k, v)
       }
     }
-    const headers: Record<string, string> = { 'X-API-Key': String(API_KEY) }
+    const headers: Record<string, string> = { 'X-API-Key': API_KEY }
     if (config.method === 'POST') headers['Content-Type'] = 'application/json'
     const res = await fetch(url.toString(), {
       method: config.method,
@@ -52,4 +56,15 @@ export const bungieHttp: HttpClient = async <T>(config: HttpClientConfig): Promi
 
 export function getPGCR(instanceId: string) {
   return getPostGameCarnageReport(bungieHttp, { activityId: instanceId })
+}
+
+export function getSkullHashes() {
+  const manifest = getDestinyManifest(bungieHttp)
+  return manifest.then((m) =>
+    getDestinyManifestComponent(bungieHttp, {
+      destinyManifest: m.Response,
+      tableName: 'DestinyActivitySelectableSkullCollectionDefinition',
+      language: 'en',
+    }),
+  )
 }
