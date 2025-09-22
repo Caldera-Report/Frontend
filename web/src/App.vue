@@ -4,10 +4,11 @@ import AppHeader from '@/components/AppHeader.vue'
 
 <template>
   <v-app>
-    <div id="app">
+    <div id="app" class="app-shell">
       <AppHeader />
-      <main class="main-content">
+      <main class="page-shell fade-in">
         <router-view />
+        <div class="footer-space" />
       </main>
     </div>
   </v-app>

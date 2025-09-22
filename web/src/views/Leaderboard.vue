@@ -1,8 +1,8 @@
 <template>
   <title>{{ pageTitle }}</title>
-  <div class="leaderboard-page">
+  <div class="leaderboard-layout">
     <h1 class="page-title">Leaderboards</h1>
-    <div class="controls">
+    <div class="leaderboard-controls">
       <v-select
         v-model="selectedType"
         :items="leaderboardTypeItems"
@@ -11,8 +11,21 @@
         label="Leaderboard Type"
         density="comfortable"
         variant="outlined"
-        class="control-item"
+        class="form-control"
       />
+      <v-text-field
+        v-model="searchTerm"
+        label="Search players..."
+        density="comfortable"
+        variant="outlined"
+        hide-details
+        clearable
+        class="form-control search-box"
+      >
+        <template #prepend-inner>
+          <v-icon size="18">mdi-magnify</v-icon>
+        </template>
+      </v-text-field>
       <v-autocomplete
         v-model="selectedActivityId"
         :items="activityItems"
@@ -21,7 +34,7 @@
         label="Activity"
         density="comfortable"
         variant="outlined"
-        class="control-item"
+        class="form-control"
         :loading="activitiesPending"
         :search="activitySearch"
         placeholder="Search activity..."
@@ -33,25 +46,16 @@
           <v-list-item v-bind="itemProps" :title="item.raw.label" />
         </template>
       </v-autocomplete>
-      <v-btn
-        variant="tonal"
-        color="primary"
-        @click="refetchCurrent"
-        :loading="anyPending"
-        class="control-item"
-      >
-        Refresh
-      </v-btn>
     </div>
 
-    <v-progress-linear v-if="anyPending" indeterminate color="primary" height="4" class="mb-4" />
+    <v-progress-linear v-if="isPending" indeterminate color="primary" height="4" class="mb-4" />
 
-    <v-alert v-if="anyError" type="error" variant="tonal" class="mb-4">
-      {{ errorMessage }}
+    <v-alert v-if="!isPending && isError" type="error" variant="tonal" class="mb-4">
+      {{ errorMessage || (error && (error as Error).message) }}
     </v-alert>
 
-    <div v-if="rows.length" class="table-wrapper elevation-2">
-      <table class="leaderboard-table">
+    <div v-if="rows.length" class="leaderboard-table-wrapper" ref="tableWrapper" @scroll="onScroll">
+      <table class="table-shell">
         <thead>
           <tr>
             <th class="rank-col">#</th>
@@ -61,9 +65,33 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, idx) in rows" :key="row.player.id">
+          <tr v-for="(row, idx) in displayedRows" :key="row.player.id">
             <td class="rank-col">{{ idx + 1 }}</td>
-            <td class="player-col player-name">{{ row.player.fullDisplayName }}</td>
+            <td
+              class="player-col player-cell"
+              role="button"
+              tabindex="0"
+              @click="goToPlayer(row.player)"
+              @keyup.enter="goToPlayer(row.player)"
+              @keyup.space.prevent="goToPlayer(row.player)"
+              :aria-label="`View profile for ${row.player.fullDisplayName}`"
+            >
+              <div class="player-name-block">
+                <v-avatar v-if="row.player.lastPlayedCharacterEmblemPath" size="28" class="mr-2">
+                  <v-img
+                    :src="'https://www.bungie.net' + row.player.lastPlayedCharacterEmblemPath"
+                    :alt="row.player.fullDisplayName"
+                    cover
+                  />
+                </v-avatar>
+                <div class="names">
+                  <div class="primary" v-html="highlight(row.player.fullDisplayName)"></div>
+                  <div v-if="row.player.displayNameCode" class="secondary">
+                    {{ row.player.displayName }}#{{ row.player.displayNameCode }}
+                  </div>
+                </div>
+              </div>
+            </td>
             <td v-if="isCompletionsRow(row)" class="stat-col">{{ row.completions }}</td>
             <td v-else-if="isTimeRow(row)" class="stat-col monospace">{{ row.time }}</td>
             <td v-else class="stat-col">—</td>
@@ -71,9 +99,10 @@
         </tbody>
       </table>
     </div>
-    <div v-else-if="!anyPending && !anyError" class="empty-state">
+    <div v-else-if="!isPending && !isError" class="empty-state">
       <span>No data available.</span>
     </div>
+    <ErrorSnackbar v-model="showErrorSnack" :message="errorMessage" />
   </div>
 </template>
 
@@ -86,8 +115,14 @@ import {
   useCompletionsLeaderboard,
   useTotalTimeLeaderboard,
 } from '@/hooks'
-import type { TimeLeaderBoardResponse, CompletionsLeaderBoardResponse } from '@/api/models'
+import type {
+  TimeLeaderBoardResponse,
+  CompletionsLeaderBoardResponse,
+  PlayerDTO,
+} from '@/api/models'
+import ErrorSnackbar from '@/components/ErrorSnackbar.vue'
 
+defineOptions({ name: 'LeaderboardsView' })
 const props = defineProps<{ type?: string; activityId?: string }>()
 
 const route = useRoute()
@@ -152,27 +187,87 @@ const activeQuery = computed(() => {
   return totalTimeQuery
 })
 
-const anyPending = computed(() => activeQuery.value.isPending.value || activitiesPending.value)
-const anyError = computed(() => activeQuery.value.isError.value || activitiesError.value || false)
-const errorMessage = computed(
-  () =>
-    (activeQuery.value.error.value as Error)?.message ||
-    (activitiesErrObj.value as Error)?.message ||
-    'Error loading data',
-)
+const isPending = computed(() => activeQuery.value.isPending.value || activitiesPending.value)
+const isError = computed(() => activeQuery.value.isError.value || activitiesError.value || false)
+const error = computed(() => activeQuery.value.error.value || activitiesErrObj.value || null)
 
-type Row = (CompletionsLeaderBoardResponse | TimeLeaderBoardResponse) & { player: any }
-const rows = computed<Row[]>(() => {
-  const data = activeQuery.value.data.value as any[] | undefined
-  if (!data) return []
-  return data as Row[]
+const showErrorSnack = ref(false)
+const errorMessage = ref('')
+
+watch([isError, error], ([errState, errObj], [prevErrState]) => {
+  if (errState && errObj && (errState !== prevErrState || showErrorSnack.value === false)) {
+    errorMessage.value = (errObj as Error).message || 'Failed to load leaderboard'
+    showErrorSnack.value = true
+  }
 })
 
-function isCompletionsRow(r: Row): r is CompletionsLeaderBoardResponse {
-  return (r as any).completions !== undefined
+type LeaderboardRow = (CompletionsLeaderBoardResponse | TimeLeaderBoardResponse) & {
+  player: PlayerDTO
 }
-function isTimeRow(r: Row): r is TimeLeaderBoardResponse {
-  return (r as any).time !== undefined
+const rows = computed<LeaderboardRow[]>(() => {
+  const data = activeQuery.value.data.value
+  if (!data) return []
+  return data as LeaderboardRow[]
+})
+
+const searchTerm = ref('')
+const INITIAL_COUNT = 100
+const BATCH_SIZE = 75
+const visibleCount = ref(INITIAL_COUNT)
+
+const filteredRows = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+  if (!term) return rows.value
+  return rows.value.filter((r) => r.player.fullDisplayName.toLowerCase().includes(term))
+})
+
+const displayedRows = computed(() => filteredRows.value.slice(0, visibleCount.value))
+
+watch([rows, searchTerm], () => {
+  visibleCount.value = INITIAL_COUNT
+})
+
+function escapeHtml(s: string) {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+  )
+}
+let hlTerm = ''
+let hlRe: RegExp | null = null
+function highlight(name: string) {
+  const term = searchTerm.value.trim()
+  if (!term) return escapeHtml(name)
+  if (term !== hlTerm) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    hlRe = new RegExp('(' + escaped + ')', 'ig')
+    hlTerm = term
+  }
+  return escapeHtml(name).replace(hlRe!, '<mark>$1</mark>')
+}
+
+function maybeGrowVisible() {
+  if (visibleCount.value >= rows.value.length) return
+  visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, rows.value.length)
+}
+
+const tableWrapper = ref<HTMLElement | null>(null)
+function onScroll() {
+  const el = tableWrapper.value
+  if (!el) return
+  const threshold = 200
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
+    maybeGrowVisible()
+  }
+}
+
+function isCompletionsRow(
+  r: LeaderboardRow,
+): r is CompletionsLeaderBoardResponse & { player: PlayerDTO } {
+  return 'completions' in r
+}
+function isTimeRow(r: LeaderboardRow): r is TimeLeaderBoardResponse & { player: PlayerDTO } {
+  return 'time' in r
 }
 
 const pageTitle = computed(() => {
@@ -188,112 +283,90 @@ watch([selectedType, selectedActivityId], ([type, act]) => {
   }
 })
 
-function refetchCurrent() {
-  if (selectedType.value === 'completions') completionsQuery.refetch()
-  else if (selectedType.value === 'besttimes') bestTimesQuery.refetch()
-  else totalTimeQuery.refetch()
+function goToPlayer(player: PlayerDTO) {
+  if (!player?.id || player.membershipType === undefined) return
+  router.push({
+    name: 'Player',
+    params: { membershipId: player.id },
+    query: { membershipType: player.membershipType },
+  })
 }
 </script>
 
 <style scoped>
-.leaderboard-page {
-  padding: 16px;
+.leaderboard-layout {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-10);
 }
-.page-title {
-  margin: 0 0 4px;
-  font-size: 1.75rem;
-  font-weight: 600;
-}
-.controls {
+.leaderboard-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-6);
   align-items: flex-end;
 }
-.control-item {
-  min-width: 220px;
+.leaderboard-table-wrapper {
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-alt);
+  box-shadow: var(--shadow-md);
+  max-height: 72vh;
+  position: relative;
 }
-.table-wrapper {
-  overflow-x: auto;
-  border-radius: 8px;
-  background: var(--v-theme-surface);
-}
-.leaderboard-table {
+.leaderboard-table-wrapper table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.95rem;
 }
-.leaderboard-table thead {
-  background: var(--v-theme-primary);
-  color: #fff;
-}
-.leaderboard-table th {
-  text-align: left;
-  padding: 10px 14px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-}
-.leaderboard-table td {
-  padding: 10px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-.leaderboard-table tbody tr:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.02);
-}
-.leaderboard-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.05);
+.leaderboard-table-wrapper mark {
+  background: var(--color-mark-bg);
 }
 .rank-col {
-  width: 52px;
-  font-weight: 600;
+  width: 56px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
-.player-col {
-  min-width: 260px;
-  font-weight: 500;
+.player-cell {
+  cursor: pointer;
 }
-.player-name {
-  font-family: system-ui, sans-serif;
+.player-cell:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.player-name-block {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.player-name-block .names {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.player-name-block .primary {
+  font-weight: 600;
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.player-name-block .secondary {
+  font-size: var(--text-xs);
+  opacity: 0.65;
 }
 .stat-col {
   width: 160px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.monospace {
-  font-family:
-    'JetBrains Mono', 'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono',
-    monospace;
-  font-size: 0.85rem;
-}
-.empty-state {
-  opacity: 0.8;
-  font-size: 0.95rem;
-  padding: 12px;
-}
-.group-header {
-  padding: 6px 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  opacity: 0.75;
-}
-@media (max-width: 640px) {
-  .controls {
+@media (max-width: 860px) {
+  .leaderboard-controls {
     flex-direction: column;
     align-items: stretch;
   }
-  .control-item {
+  .leaderboard-controls .form-control {
     width: 100%;
-  }
-  .stat-col {
-    text-align: left;
   }
 }
 </style>

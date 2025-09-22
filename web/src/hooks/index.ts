@@ -9,14 +9,14 @@ import {
   getBestTimesLeaderboard,
   getTotalTimeLeaderboard,
 } from '@/api/api/caldera-report-api'
-import { getPGCR, getSkullHashes } from '@/api/http/bungieClient'
+import { getPGCR, getActivitiesBungie, getClanForUser } from '@/api/http/bungieClient'
 import type { ActivityReportDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
-import type {
-  DestinyActivitySelectableSkullCollectionDefinition,
-  DestinyActivitySkull,
-  DestinyPostGameCarnageReportData,
+import {
+  type DestinyActivityDefinition,
+  type DestinyPostGameCarnageReportData,
 } from 'bungie-api-ts/destiny2'
+import type { GetGroupsForMemberResponse } from 'bungie-api-ts/groupv2'
 import { unref, type Ref } from 'vue'
 
 export const usePlayers = () => {
@@ -60,10 +60,10 @@ export const useAllActivities = () => {
   })
 }
 
-export const usePlayer = (membershipId: string, membershipType: number) => {
+export const usePlayer = (membershipId: string) => {
   return useQuery<PlayerDTO>({
-    queryKey: ['player', membershipType, membershipId],
-    queryFn: () => getPlayer(membershipId, membershipType),
+    queryKey: ['player', membershipId],
+    queryFn: () => getPlayer(membershipId),
     staleTime: 60 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -154,14 +154,29 @@ export const useActivityReport = (instanceId: string) => {
   })
 }
 
-export const useSkullHashes = () => {
-  return useQuery<DestinyActivitySelectableSkullCollectionDefinition[]>({
-    queryKey: ['skullHashes'],
+export const useClanForUser = (membershipId: string, membershipType: number | Ref<number>) => {
+  return useQuery<GetGroupsForMemberResponse>({
+    queryKey: ['clanForUser', membershipId, unref(membershipType)],
+    queryFn: () => getClanForUser(membershipId, unref(membershipType)).then((r) => r.Response),
+    enabled: () => unref(membershipType) !== 0,
+    staleTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  })
+}
+
+//TODO: Move all manifest stuff to the server, and store it all in a DB somewhere so I don't have to make 2 http requests to get one thing
+
+export const useDestinyActivity = (activityId: number | Ref<number>) => {
+  return useQuery<DestinyActivityDefinition>({
+    queryKey: ['activity', unref(activityId)],
     queryFn: async () => {
-      const response = await getSkullHashes()
-      return Object.values(response) as DestinyActivitySelectableSkullCollectionDefinition[]
+      const id = unref(activityId)
+      const response = await getActivitiesBungie()
+      return response[id] as DestinyActivityDefinition
     },
-    staleTime: 'static',
+    enabled: () => unref(activityId) != 0,
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: 1,
   })

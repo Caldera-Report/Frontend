@@ -1,62 +1,77 @@
 <template>
-  <v-card class="activity-card" elevation="2">
-    <div class="banner" :style="{ backgroundImage: `url(${imageUrl})` }">
-      <div class="banner-overlay">
-        <h3 class="name">{{ activityName }}</h3>
+  <v-card class="activity-card-new" elevation="2">
+    <div class="activity-card-new__banner" :style="{ backgroundImage: `url(${imageUrl})` }">
+      <div class="activity-card-new__label-row">
+        <div class="activity-card-new__title">{{ activityName }}</div>
       </div>
     </div>
-    <div class="content">
+    <div class="activity-card-new__body">
       <v-progress-linear v-if="isPending" indeterminate color="primary" height="3" class="mb-1" />
       <div v-if="isError" class="error-state d-flex align-center justify-space-between">
         <span class="error-text">Failed to load reports</span>
         <v-btn size="x-small" variant="tonal" color="error" @click="refetch">Retry</v-btn>
       </div>
-      <div class="stats-row">
-        <div class="primary-stat">
-          <div class="value">{{ totalClears }}</div>
-          <div class="label">Total Clears</div>
+      <div class="activity-stats-row plain">
+        <div class="stat-group-left">
+          <span class="stat-label">Total Clears:</span>
+          <span class="stat-value strong">{{ totalClears }}</span>
         </div>
-        <div class="other-stats">
-          <div class="stat">
-            <div class="value">{{ recentDurationFormatted }}</div>
-            <div class="label">Recent</div>
+        <div class="stat-group-right">
+          <div class="stat-pair">
+            <span class="stat-label">Recent</span>
+            <span class="stat-value">{{ recentDurationFormatted }}</span>
           </div>
-          <div class="stat">
-            <div class="value">{{ fastestDurationFormatted }}</div>
-            <div class="label">Fastest</div>
+          <div class="divider-dot"></div>
+          <div class="stat-pair">
+            <span class="stat-label">Fastest</span>
+            <span class="stat-value">{{ fastestDurationFormatted }}</span>
           </div>
-          <div class="stat">
-            <div class="value">{{ averageDurationFormatted }}</div>
-            <div class="label">Average</div>
+          <div class="divider-dot"></div>
+          <div class="stat-pair">
+            <span class="stat-label">Average</span>
+            <span class="stat-value">{{ averageDurationFormatted }}</span>
           </div>
         </div>
       </div>
       <div
-        class="graph-wrapper"
+        class="graph-shell"
         ref="graphWrapperEl"
-        :class="{ 'is-scrollable': isScrollable }"
+        :class="[isScrollable ? 'is-scrollable' : '', fadeClass]"
         :style="graphVars"
       >
-        <div class="graph" ref="graphEl" :style="{ width: graphRenderWidth + 'px' }">
-          <div class="line" :style="{ top: linePosition }" />
-          <div class="dots">
-            <template v-for="report in reportsSorted" :key="report.id">
-              <v-tooltip location="end" :text="dotTooltip(report)">
-                <template #activator="{ props: tt }">
-                  <div class="dot-wrapper">
-                    <button
-                      class="dot"
-                      v-bind="tt"
-                      :style="dotStyle(report)"
-                      :class="{ completed: report.completed }"
-                      @click="onSelect(report)"
-                      tabindex="0"
-                    />
-                  </div>
-                </template>
-              </v-tooltip>
+        <div
+          class="graph"
+          ref="graphEl"
+          :style="{ width: graphContentWidth + 'px', height: 'var(--graph-height, 76px)' }"
+        >
+          <div class="graph__avg-line" :style="{ top: graphHeight / 2 + 'px' }"></div>
+          <v-tooltip
+            v-for="pt in pointsPlottable"
+            :key="pt.r.instanceId"
+            :text="dotTooltip(pt.r)"
+            location="top"
+            open-delay="60"
+            close-delay="0"
+            transition="fade-transition"
+            content-class="graph-point-tooltip"
+          >
+            <template #activator="{ props: act }">
+              <div
+                v-bind="act"
+                class="graph__point"
+                :class="{ 'is-completed': pt.isCompleted, 'is-incomplete': !pt.isCompleted }"
+                :style="{
+                  transform: `translate(${pt.x}px, ${pt.y}px)`,
+                  width: pointRadius * 2 + 'px',
+                  height: pointRadius * 2 + 'px',
+                  marginLeft: -pointRadius + 'px',
+                  marginTop: -pointRadius + 'px',
+                }"
+                tabindex="0"
+                @click="onSelect(pt.r)"
+              />
             </template>
-          </div>
+          </v-tooltip>
         </div>
       </div>
     </div>
@@ -64,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { usePlayerReportsForActivity } from '@/hooks'
 import type { ActivityReportDTO } from '@/api/models'
 
@@ -186,7 +201,6 @@ function dotTooltip(r: ActivityReportDTO) {
 
 function onSelect(r: ActivityReportDTO) {
   window.location.href = `/activityreport/${r.instanceId}`
-  emit('select-report', r)
 }
 
 const graphEl = ref<HTMLElement | null>(null)
@@ -202,251 +216,347 @@ const durationDomain = computed(() => {
   return { min, max, avg }
 })
 
-const isMobile = ref(false)
-const metrics = computed(() => {
-  if (isMobile.value) {
-    return { height: 60, padding: 5, dot: 12, gap: 5, dotWrapperExtra: 2 }
-  }
-  return { height: 76, padding: 5, dot: 14, gap: 6, dotWrapperExtra: 2 }
-})
-
+const graphHeight = 56
+const pointRadius = 7
+const verticalPadding = 10
+const pointSpacing = 22
+const leftOffset = 14
+const rightOffset = 6
+const baseGraphWidth = computed(() =>
+  reportsSorted.value.length
+    ? leftOffset + (reportsSorted.value.length - 1) * pointSpacing + rightOffset
+    : 0,
+)
 const wrapperWidth = ref(0)
-const isScrollable = ref(false)
+const graphContentWidth = computed(() => Math.max(baseGraphWidth.value, wrapperWidth.value))
 
-const graphWidth = computed(() => {
-  const n = reportsSorted.value.length
-  if (!n) return 220
-  const dotWrapperWidth = metrics.value.dot + metrics.value.dotWrapperExtra
-  const totalDots = n * dotWrapperWidth
-  const totalGaps = (n - 1) * metrics.value.gap
-  const horizontalPadding = 8
-  return Math.max(220, totalDots + totalGaps + horizontalPadding)
+const maxDeviation = computed(() => {
+  if (!reportsSorted.value.length) return 0
+  const avg = durationDomain.value.avg
+  const deviations = reportsSorted.value.map((r) => Math.abs(parseDuration(r.duration) - avg))
+  return Math.max(...deviations, 1)
 })
 
-const graphRenderWidth = computed(() => Math.max(graphWidth.value, wrapperWidth.value))
-
-const linePosition = computed(() => `${metrics.value.height / 2 - 1}px`)
-
-const EPSILON = 0.000001
+const pointsPlottable = computed(() =>
+  reportsSorted.value.map((r, idx) => {
+    const duration = parseDuration(r.duration)
+    const avg = durationDomain.value.avg || 0
+    const deviation = duration - avg
+    const normalized = deviation / (maxDeviation.value || 1)
+    const centerY = graphHeight / 2
+    const amplitude = graphHeight / 2 - verticalPadding
+    const y = centerY + normalized * amplitude
+    const x = leftOffset + idx * pointSpacing
+    return { r, x, y, duration, deviation, isCompleted: r.completed }
+  }),
+)
 
 const graphVars = computed(() => ({
-  '--graph-height': metrics.value.height + 'px',
-  '--graph-dot-size': metrics.value.dot + 'px',
-  '--graph-dot-wrapper-width': metrics.value.dot + metrics.value.dotWrapperExtra + 'px',
+  '--graph-height': graphHeight + 'px',
 }))
 
-function dotStyle(r: ActivityReportDTO) {
-  const { min, max, avg } = durationDomain.value
-  if (max <= min) {
-    const centerPx = metrics.value.height / 2
-    return { top: `${centerPx.toFixed(2)}px`, transform: 'translateY(-50%)' }
-  }
-  const d = parseDuration(r.duration)
-  const center = metrics.value.height / 2
-  const topCenter = metrics.value.padding + metrics.value.dot / 2
-  const bottomCenter = metrics.value.height - metrics.value.padding - metrics.value.dot / 2 - 1
+const isScrollable = ref(false)
+const atLeftEdge = ref(true)
+const atRightEdge = ref(true)
+const fadeClass = computed(() => {
+  if (!isScrollable.value) return ''
+  if (atLeftEdge.value && atRightEdge.value) return ''
+  if (atLeftEdge.value) return 'fade-right'
+  if (atRightEdge.value) return 'fade-left'
+  return 'fade-both'
+})
 
-  if (
-    Math.abs(d - avg) < EPSILON ||
-    (Math.abs(avg - min) < EPSILON && Math.abs(d - min) < EPSILON) ||
-    (Math.abs(avg - max) < EPSILON && Math.abs(d - max) < EPSILON)
-  ) {
-    return { top: `${center.toFixed(2)}px`, transform: 'translateY(-50%)' }
-  }
-
-  if (d > avg) {
-    const denom = max - avg
-    const ratioSlow = denom > 0 ? (d - avg) / denom : 0
-    const y = center - ratioSlow * (center - topCenter)
-    return { top: `${y.toFixed(2)}px`, transform: 'translateY(-50%)' }
-  }
-
-  const denomFast = avg - min
-  const ratioFast = denomFast > 0 ? (avg - d) / denomFast : 0
-  const y = center + ratioFast * (bottomCenter - center)
-  return { top: `${y.toFixed(2)}px`, transform: 'translateY(-50%)' }
-}
-
-function scrollGraphToRight() {
+function updateScrollable() {
   if (!graphWrapperEl.value) return
-  if (graphWrapperEl.value.scrollWidth > graphWrapperEl.value.clientWidth) {
-    graphWrapperEl.value.scrollLeft =
-      graphWrapperEl.value.scrollWidth - graphWrapperEl.value.clientWidth
-  }
+  wrapperWidth.value = graphWrapperEl.value.clientWidth - 8
+  isScrollable.value = graphWrapperEl.value.scrollWidth > graphWrapperEl.value.clientWidth + 8
+  updateEdgeState()
 }
 
-onMounted(() => {
-  const applyBp = () => {
-    isMobile.value = window.innerWidth <= 600
-  }
-  applyBp()
-  window.addEventListener('resize', applyBp)
-  const measure = () => {
-    if (graphWrapperEl.value) {
-      wrapperWidth.value = graphWrapperEl.value.clientWidth
-      isScrollable.value = graphWidth.value > wrapperWidth.value
-    }
-  }
-  measure()
-  if ('ResizeObserver' in window) {
-    const ro = new ResizeObserver(() => {
-      measure()
-    })
-    if (graphWrapperEl.value) ro.observe(graphWrapperEl.value)
-  }
-  nextTick(() => {
-    measure()
-    scrollGraphToRight()
-  })
+function updateEdgeState() {
+  if (!graphWrapperEl.value) return
+  const el = graphWrapperEl.value
+  const maxScroll = el.scrollWidth - el.clientWidth
+  const sl = el.scrollLeft
+  atLeftEdge.value = sl <= 1
+  atRightEdge.value = maxScroll - sl <= 1
+}
+
+async function scrollToRight() {
+  await nextTick()
+  if (!graphWrapperEl.value) return
+  graphWrapperEl.value.scrollLeft = graphWrapperEl.value.scrollWidth
+}
+
+watch(pointsPlottable, async () => {
+  await nextTick()
+  updateScrollable()
+  scrollToRight()
+})
+
+onMounted(async () => {
+  updateScrollable()
+  scrollToRight()
+  graphWrapperEl.value?.addEventListener('scroll', updateEdgeState, { passive: true })
+  window.addEventListener('resize', updateScrollable)
 })
 
 watch(
-  () => reportsSorted.value.length,
-  () => {
-    nextTick(() => scrollGraphToRight())
+  () => props.ready,
+  async (val) => {
+    if (val) {
+      await nextTick()
+      updateScrollable()
+      scrollToRight()
+    }
   },
 )
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateScrollable)
+  graphWrapperEl.value?.removeEventListener('scroll', updateEdgeState)
+})
 </script>
 
 <style scoped>
-.activity-card {
-  background: #0d0d11;
-  color: #fff;
+.activity-card-new {
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-sm);
 }
-.banner {
+.activity-card-new__banner {
+  height: 170px;
   position: relative;
   background-size: cover;
   background-position: center;
-  height: 140px;
 }
-.banner-overlay {
+.activity-card-new__banner::after {
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.75) 85%);
-  display: flex;
-  align-items: flex-end;
-  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.85) 88%);
 }
-.name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
+.activity-card-new__label-row {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  z-index: 2;
+}
+.activity-card-new__title {
+  font-size: 1.05rem;
+  font-weight: 600;
   letter-spacing: 0.5px;
-}
-.content {
-  padding: 8px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.stats-row {
-  display: flex;
-  align-items: stretch;
-  gap: 20px;
-}
-.primary-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-weight: 600;
-  min-width: 70px;
-}
-.primary-stat .value {
-  font-size: 2rem;
-  line-height: 1;
-}
-.label {
-  font-size: 0.65rem;
+  line-height: 1.1;
   text-transform: uppercase;
-  opacity: 0.7;
-  letter-spacing: 1px;
+  color: var(--color-text);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
-.other-stats {
+.activity-card-new__body {
+  padding: 0.75rem 0.85rem 1rem;
   display: flex;
-  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.activity-stats-row.plain {
+  display: flex;
   justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+  letter-spacing: 0.3px;
 }
-.stat {
-  text-align: center;
-  flex: 1;
+.stat-group-left {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
 }
-.stat .value {
-  font-size: 0.95rem;
+.stat-group-right {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.stat-label {
+  text-transform: uppercase;
+  opacity: 0.6;
+  font-size: 0.65rem;
+  letter-spacing: 0.6px;
+}
+.stat-value {
   font-weight: 600;
 }
-.graph-wrapper {
+.stat-value.strong {
+  font-size: 1.1rem;
+}
+.stat-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.divider-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-border);
+  align-self: center;
+  opacity: 0.55;
+  margin-top: 2px;
+}
+.graph-shell {
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  padding: 6px 4px;
+  scrollbar-width: thin;
 }
-.graph-wrapper.is-scrollable::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+.graph-shell::-webkit-scrollbar {
+  height: 8px;
+}
+.graph-shell::-webkit-scrollbar-track {
+  background: transparent;
+}
+.graph-shell::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.graph-shell::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.graph-shell.is-scrollable {
+  --fade-size: 28px;
+}
+.graph-shell.fade-both.is-scrollable {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade-size),
+    #000 calc(100% - var(--fade-size)),
+    transparent 100%
+  );
+}
+.graph-shell.fade-right.is-scrollable {
+  mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - var(--fade-size)),
+    transparent 100%
+  );
+}
+.graph-shell.fade-left.is-scrollable {
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-size), #000 100%);
 }
 .graph {
   position: relative;
-  min-width: 220px;
-  padding: 6px 4px 4px;
-  height: var(--graph-height, 76px);
 }
-.graph .line {
+.graph__avg-line {
   position: absolute;
   left: 0;
-  right: 0;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.35);
+  width: 100%;
+  height: 0;
+  border-top: 2px solid var(--color-border-strong, rgba(255, 255, 255, 0.6));
   pointer-events: none;
-}
-.dots {
-  display: flex;
-  gap: 6px;
-  position: relative;
   z-index: 1;
-  height: 100%;
-  align-items: stretch;
-  padding: 0 2px;
 }
-.dot-wrapper {
-  position: relative;
-  width: var(--graph-dot-wrapper-width, 18px);
-  flex: 0 0 auto;
-}
-.dot {
+.graph__point {
+  z-index: 3;
   position: absolute;
-  left: 1px;
-  width: var(--graph-dot-size, 12px);
-  height: var(--graph-dot-size, 12px);
+  top: 0;
+  left: 0;
   border-radius: 50%;
-  background: #d9534f;
+  background: var(--color-accent, #888);
   cursor: pointer;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 2px rgba(0, 0, 0, 0.4);
   transition:
     transform 0.15s ease,
-    box-shadow 0.15s ease;
+    background-color 0.2s;
 }
-.dot.completed {
-  background: #2e7d32;
+.graph__point.is-completed {
+  background: #27ae60;
 }
-.dot:hover {
-  transform: scale(1.15);
-  box-shadow: 0 0 0 2px #90caf9;
+.graph__point.is-incomplete {
+  background: #c0392b;
+}
+.graph__point:hover {
+  z-index: 3;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 0 3px rgba(0, 0, 0, 0.5);
+}
+.graph__point::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    border-color 0.25s ease;
+}
+.graph__point:hover::after,
+.graph__point:focus-visible::after {
+  opacity: 1;
+  transform: scale(1);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.graph__point:focus-visible {
+  outline: none;
+}
+:deep(.graph-point-tooltip) {
+  background: #0c0f14 !important;
+  color: #f5f8fa !important;
+  font-size: 0.65rem !important;
+  line-height: 1.25 !important;
+  padding: 4px 6px 5px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+  box-shadow:
+    0 4px 10px -2px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  letter-spacing: 0.3px;
+}
+:deep(.graph-point-tooltip .v-overlay__content) {
+  padding: 0 !important;
 }
 .error-state {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid #e74c3c33;
+  padding: 4px 6px;
+  border-radius: 6px;
   font-size: 0.75rem;
+  gap: 0.5rem;
+  margin-bottom: 4px;
 }
 .error-text {
-  opacity: 0.8;
+  color: #ffb4ac;
 }
-::-webkit-scrollbar {
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 3px;
+@media (max-width: 600px) {
+  .stat-group-right {
+    gap: 0.65rem;
+  }
+  .activity-card-new__banner {
+    height: 140px;
+  }
+  .activity-stats-row {
+    flex-direction: column;
+  }
 }
 </style>

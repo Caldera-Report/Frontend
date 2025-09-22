@@ -20,8 +20,8 @@ export async function getActivities(): Promise<OpTypeDTO[]> {
   return calderaGet<OpTypeDTO[]>('/activities')
 }
 
-export async function getPlayer(playerId: string, membershipType: number): Promise<PlayerDTO> {
-  return calderaGet<PlayerDTO>(`/players/${membershipType}/${playerId}`)
+export async function getPlayer(playerId: string): Promise<PlayerDTO> {
+  return calderaGet<PlayerDTO>(`/players/${playerId}`)
 }
 
 export async function getPlayerReportsForActivity(

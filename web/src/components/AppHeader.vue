@@ -1,21 +1,16 @@
 <template>
-  <header class="header">
-    <div class="logo-outer">
-      <a href="/" class="header-logo">
-        <div class="logo-container">
-          <img src="/Logo.png" alt="Caldera Report Logo" class="app-logo" />
-          <h1 class="app-name">Caldera Report</h1>
-        </div>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a ref="brandEl" href="/" class="site-header__brand" aria-label="Caldera Report Home">
+        <img src="/Logo.png" alt="Caldera Report Logo" class="site-header__logo" />
+        <span class="site-header__name">Caldera Report</span>
       </a>
-    </div>
-
-    <div class="header-container">
-      <div class="header-center">
+      <div class="site-header__search">
         <PlayerSearch :enable-remote-search="true" @select="onPlayerSelected" />
       </div>
-      <div class="header-right">
-        <!-- Space for future navigation items -->
-      </div>
+      <nav class="site-header__nav" :style="navMirrorStyle" aria-label="Primary Navigation">
+        <!-- Future nav items -->
+      </nav>
     </div>
   </header>
 </template>
@@ -23,92 +18,87 @@
 <script setup lang="ts">
 import { type PlayerDTO } from '@/api/models'
 import PlayerSearch from './PlayerSearch.vue'
+import { ref, onMounted, nextTick } from 'vue'
 
 function onPlayerSelected(p: PlayerDTO) {
   const idStr = p.id.toString()
   window.location.href = `/player/${idStr}`
 }
+
+const brandEl = ref<HTMLElement | null>(null)
+const brandWidth = ref(0)
+const navMirrorStyle = ref<Record<string, string>>({})
+
+function measureBrand() {
+  if (!brandEl.value) return
+  brandWidth.value = brandEl.value.getBoundingClientRect().width
+  navMirrorStyle.value = { width: brandWidth.value + 'px' }
+}
+
+onMounted(() => {
+  nextTick(() => {
+    measureBrand()
+    window.addEventListener('resize', measureBrand)
+  })
+})
 </script>
 
 <style scoped>
-.header {
-  position: relative;
+.site-header {
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.95);
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.9);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.7);
 }
-
-.logo-outer {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1010;
-}
-
-.header-container {
+.site-header__inner {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  max-width: 1400px;
-  margin: 0 auto;
-  height: 80px;
+  height: 76px;
   width: 100%;
-  gap: 16px;
+  margin: 0;
+  padding: 0 var(--space-4) 0 0;
+  column-gap: var(--space-12);
 }
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 250px;
+.site-header__brand {
   justify-self: start;
 }
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.app-logo {
-  height: 50px;
-  width: auto;
-  object-fit: contain;
-}
-
-.app-name {
-  font-size: 1.8rem;
-  font-weight: bold;
-  margin: 0;
-  background: linear-gradient(45deg, #ff6b6b, #ffa500, #ff1493);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  white-space: nowrap;
-}
-
-.header-center {
-  grid-column: 2 / 3;
+.site-header__search {
   justify-self: center;
   width: 100%;
-  max-width: 420px;
-  display: flex;
-  justify-content: center;
+  max-width: 520px;
 }
-.header-center > * {
-  width: 100%;
-}
-
-.header-right {
-  min-width: 250px;
+.site-header__brand {
   display: flex;
-  justify-content: flex-end;
-  justify-self: end;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.site-header__logo {
+  height: 48px;
+  width: auto;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.site-header__name {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.75px;
+  color: var(--color-text);
+}
+.site-header__search {
+  flex: 1;
+  max-width: 480px;
+}
+@media (max-width: 860px) {
+  .site-header__inner {
+    gap: var(--space-6);
+  }
+  .site-header__name {
+    font-size: 1.1rem;
+  }
 }
 </style>

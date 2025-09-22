@@ -1,5 +1,5 @@
 <template>
-  <div class="player-search">
+  <div class="player-search search-highlight">
     <div ref="searchContainer" class="search-input">
       <v-text-field
         autocomplete="off"
@@ -340,35 +340,21 @@ watch([isError, errorMessage], ([errState, msg], [prevErrState]) => {
 </script>
 
 <style scoped>
-.player-search {
+.search-input {
   position: relative;
 }
+
 .search-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 20;
+  z-index: 100;
   margin-top: 4px;
+}
+
+.search-dropdown > .v-card {
   width: 100%;
-}
-mark {
-  background: rgba(var(--v-theme-primary), 0.25);
-  padding: 0 2px;
-  border-radius: 2px;
-}
-.search-input {
-  position: relative;
-  min-width: 320px;
-  max-width: 420px;
-  flex: 1;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-}
-.search-input:focus {
-  outline: none;
-  border-color: #ff6b6b;
-  background: rgba(255, 255, 255, 0.15);
+  max-height: 360px;
+  overflow-y: auto;
 }
 </style>
