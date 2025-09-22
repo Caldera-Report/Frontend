@@ -63,9 +63,6 @@ onMounted(() => {
   padding: 0 var(--space-4) 0 0;
   column-gap: var(--space-12);
 }
-.site-header__brand {
-  justify-self: start;
-}
 .site-header__search {
   justify-self: center;
   width: 100%;

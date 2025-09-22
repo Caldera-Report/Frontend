@@ -345,6 +345,7 @@ watch(
   gap: var(--space-8);
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
+
 @media (max-width: 640px) {
   .activities-grid {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

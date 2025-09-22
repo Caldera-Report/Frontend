@@ -6,7 +6,13 @@
       </div>
     </div>
     <div class="activity-card-new__body">
-      <v-progress-linear v-if="isPending" indeterminate color="primary" height="3" class="mb-1" />
+      <v-progress-linear
+        v-if="isPending || isGraphComputing"
+        indeterminate
+        color="primary"
+        height="3"
+        class="mb-1"
+      />
       <div v-if="isError" class="error-state d-flex align-center justify-space-between">
         <span class="error-text">Failed to load reports</span>
         <v-btn size="x-small" variant="tonal" color="error" @click="refetch">Retry</v-btn>
@@ -36,13 +42,20 @@
       <div
         class="graph-shell"
         ref="graphWrapperEl"
-        :class="[isScrollable ? 'is-scrollable' : '', fadeClass]"
+        :class="[isScrollable ? 'is-scrollable' : '', fadeClass, isGraphComputing ? 'is-loading' : '']"
         :style="graphVars"
       >
+        <div v-if="isGraphComputing" class="graph-skeleton" aria-live="polite">
+          <div class="skeleton-bar" v-for="n in 5" :key="n" />
+          <span class="skeleton-label">Rendering graph…</span>
+        </div>
         <div
           class="graph"
           ref="graphEl"
-          :style="{ width: graphContentWidth + 'px', height: 'var(--graph-height, 76px)' }"
+          :style="{
+            width: isScrollable ? graphContentWidth + 'px' : '100%',
+            height: 'var(--graph-height, 76px)',
+          }"
         >
           <div class="graph__avg-line" :style="{ top: graphHeight / 2 + 'px' }"></div>
           <v-tooltip
@@ -220,15 +233,15 @@ const graphHeight = 56
 const pointRadius = 7
 const verticalPadding = 10
 const pointSpacing = 22
-const leftOffset = 14
-const rightOffset = 6
+const leftOffset = pointRadius + 10
+const rightOffset = pointRadius + 5
 const baseGraphWidth = computed(() =>
   reportsSorted.value.length
     ? leftOffset + (reportsSorted.value.length - 1) * pointSpacing + rightOffset
     : 0,
 )
 const wrapperWidth = ref(0)
-const graphContentWidth = computed(() => Math.max(baseGraphWidth.value, wrapperWidth.value))
+const graphContentWidth = computed(() => baseGraphWidth.value)
 
 const maxDeviation = computed(() => {
   if (!reportsSorted.value.length) return 0
@@ -268,8 +281,12 @@ const fadeClass = computed(() => {
 
 function updateScrollable() {
   if (!graphWrapperEl.value) return
-  wrapperWidth.value = graphWrapperEl.value.clientWidth - 8
-  isScrollable.value = graphWrapperEl.value.scrollWidth > graphWrapperEl.value.clientWidth + 8
+  wrapperWidth.value = graphWrapperEl.value.clientWidth
+  const tolerance = 2
+  isScrollable.value = baseGraphWidth.value > wrapperWidth.value + tolerance
+  if (!isScrollable.value) {
+    graphWrapperEl.value.scrollLeft = 0
+  }
   updateEdgeState()
 }
 
@@ -288,13 +305,26 @@ async function scrollToRight() {
   graphWrapperEl.value.scrollLeft = graphWrapperEl.value.scrollWidth
 }
 
+const isGraphComputing = ref(false)
+
+function beginGraphCompute() {
+  isGraphComputing.value = true
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      isGraphComputing.value = false
+    })
+  })
+}
+
 watch(pointsPlottable, async () => {
+  beginGraphCompute()
   await nextTick()
   updateScrollable()
   scrollToRight()
 })
 
 onMounted(async () => {
+  beginGraphCompute()
   updateScrollable()
   scrollToRight()
   graphWrapperEl.value?.addEventListener('scroll', updateEdgeState, { passive: true })
@@ -306,6 +336,7 @@ watch(
   async (val) => {
     if (val) {
       await nextTick()
+      beginGraphCompute()
       updateScrollable()
       scrollToRight()
     }
@@ -421,6 +452,12 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
   padding: 6px 4px;
   scrollbar-width: thin;
+}
+.graph-shell.is-loading {
+  min-height: var(--graph-height, 76px);
+}
+.graph-shell:not(.is-scrollable) {
+  overflow-x: hidden;
 }
 .graph-shell::-webkit-scrollbar {
   height: 8px;
