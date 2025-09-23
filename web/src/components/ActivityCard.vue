@@ -19,12 +19,30 @@
           <span class="stat-value strong">{{ totalClears }}</span>
         </div>
         <div class="stat-group-right">
-          <div class="stat-pair">
+          <router-link
+            v-if="recentCompletion"
+            :to="`/activityreport/${recentCompletion.instanceId}`"
+            class="stat-pair"
+            :title="dotTooltip(recentCompletion)"
+          >
+            <span class="stat-label">Recent</span>
+            <span class="stat-value">{{ recentDurationFormatted }}</span>
+          </router-link>
+          <div v-else class="stat-pair">
             <span class="stat-label">Recent</span>
             <span class="stat-value">{{ recentDurationFormatted }}</span>
           </div>
           <div class="divider-dot"></div>
-          <div class="stat-pair">
+          <router-link
+            v-if="fastestCompletion"
+            :to="`/activityreport/${fastestCompletion.instanceId}`"
+            class="stat-pair"
+            :title="dotTooltip(fastestCompletion)"
+          >
+            <span class="stat-label">Fastest</span>
+            <span class="stat-value">{{ fastestDurationFormatted }}</span>
+          </router-link>
+          <div v-else class="stat-pair">
             <span class="stat-label">Fastest</span>
             <span class="stat-value">{{ fastestDurationFormatted }}</span>
           </div>
@@ -340,9 +358,8 @@ function handlePointerMove(ev: MouseEvent) {
   const canvas = canvasEl.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
-  const dpr = devicePixelRatioRef.value
-  const x = (ev.clientX - rect.left) * (1 / dpr)
-  const y = (ev.clientY - rect.top) * (1 / dpr)
+  const x = ev.clientX - rect.left
+  const y = ev.clientY - rect.top
   const found = findPointAt(x, y)
   if (found) {
     hoverState.value = {

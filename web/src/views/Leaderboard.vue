@@ -109,12 +109,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  useAllActivities,
-  useBestTimesLeaderboard,
-  useCompletionsLeaderboard,
-  useTotalTimeLeaderboard,
-} from '@/hooks'
+import { useAllActivities, useLeaderboard } from '@/hooks'
 import type {
   TimeLeaderBoardResponse,
   CompletionsLeaderBoardResponse,
@@ -177,19 +172,12 @@ function shouldShowSubheader(index: number, group: string) {
   return !prev || prev.group !== group
 }
 
-const completionsQuery = useCompletionsLeaderboard(selectedActivityId)
-const bestTimesQuery = useBestTimesLeaderboard(selectedActivityId)
-const totalTimeQuery = useTotalTimeLeaderboard(selectedActivityId)
+const leaderboardQuery = useLeaderboard(selectedType, selectedActivityId)
+const activeQuery = computed(() => leaderboardQuery)
 
-const activeQuery = computed(() => {
-  if (selectedType.value === 'completions') return completionsQuery
-  if (selectedType.value === 'besttimes') return bestTimesQuery
-  return totalTimeQuery
-})
-
-const isPending = computed(() => activeQuery.value.isPending.value || activitiesPending.value)
-const isError = computed(() => activeQuery.value.isError.value || activitiesError.value || false)
-const error = computed(() => activeQuery.value.error.value || activitiesErrObj.value || null)
+const isPending = computed(() => leaderboardQuery.isPending.value || activitiesPending.value)
+const isError = computed(() => leaderboardQuery.isError.value || activitiesError.value || false)
+const error = computed(() => leaderboardQuery.error.value || activitiesErrObj.value || null)
 
 const showErrorSnack = ref(false)
 const errorMessage = ref('')
@@ -288,7 +276,6 @@ function goToPlayer(player: PlayerDTO) {
   router.push({
     name: 'Player',
     params: { membershipId: player.id },
-    query: { membershipType: player.membershipType },
   })
 }
 </script>
