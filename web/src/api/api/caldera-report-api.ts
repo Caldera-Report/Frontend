@@ -1,7 +1,7 @@
 import { calderaGet, calderaPost } from '../http/calderaClient'
 import {
   type ActivityLoadResponse,
-  type ActivityReportDTO,
+  type ActivityReportListDTO,
   type CompletionsLeaderBoardResponse,
   type OpTypeDTO,
   type PlayerDTO,
@@ -27,8 +27,8 @@ export async function getPlayer(playerId: string): Promise<PlayerDTO> {
 export async function getPlayerReportsForActivity(
   playerId: string,
   activityId: string,
-): Promise<ActivityReportDTO[]> {
-  return calderaGet<ActivityReportDTO[]>(`/players/${playerId}/stats/${activityId}`)
+): Promise<ActivityReportListDTO> {
+  return calderaGet<ActivityReportListDTO>(`/players/${playerId}/stats/${activityId}`)
 }
 
 export async function updatePlayerActivityReports(playerId: string): Promise<ActivityLoadResponse> {

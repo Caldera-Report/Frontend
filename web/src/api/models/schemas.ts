@@ -15,6 +15,12 @@ export interface ActivityReportDTO {
   player?: PlayerDTO
 }
 
+export interface ActivityReportListDTO {
+  reports: ActivityReportDTO[]
+  average: string
+  best: ActivityReportDTO | null
+}
+
 export interface ActivityDTO {
   id: string
   name: string

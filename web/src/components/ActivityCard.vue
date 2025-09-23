@@ -13,10 +13,6 @@
         height="3"
         class="mb-1"
       />
-      <div v-if="isError" class="error-state d-flex align-center justify-space-between">
-        <span class="error-text">Failed to load reports</span>
-        <v-btn size="x-small" variant="tonal" color="error" @click="refetch">Retry</v-btn>
-      </div>
       <div class="activity-stats-row plain">
         <div class="stat-group-left">
           <span class="stat-label">Total Clears:</span>
@@ -42,7 +38,11 @@
       <div
         class="graph-shell"
         ref="graphWrapperEl"
-        :class="[isScrollable ? 'is-scrollable' : '', fadeClass, isGraphComputing ? 'is-loading' : '']"
+        :class="[
+          isScrollable ? 'is-scrollable' : '',
+          fadeClass,
+          isGraphComputing ? 'is-loading' : '',
+        ]"
         :style="graphVars"
       >
         <div v-if="isGraphComputing" class="graph-skeleton" aria-live="polite">
@@ -53,40 +53,31 @@
           class="graph"
           ref="graphEl"
           :style="{
-            width: isScrollable ? graphContentWidth + 'px' : '100%',
-            height: 'var(--graph-height, 76px)',
+            width: displayGraphWidth + 'px',
+            height: graphHeight + 'px',
           }"
         >
-          <div class="graph__avg-line" :style="{ top: graphHeight / 2 + 'px' }"></div>
-          <v-tooltip
-            v-for="pt in pointsPlottable"
-            :key="pt.r.instanceId"
-            :text="dotTooltip(pt.r)"
-            location="top"
-            open-delay="60"
-            close-delay="0"
-            transition="fade-transition"
-            content-class="graph-point-tooltip"
-          >
-            <template #activator="{ props: act }">
-              <div
-                v-bind="act"
-                class="graph__point"
-                :class="{ 'is-completed': pt.isCompleted, 'is-incomplete': !pt.isCompleted }"
-                :style="{
-                  transform: `translate(${pt.x}px, ${pt.y}px)`,
-                  width: pointRadius * 2 + 'px',
-                  height: pointRadius * 2 + 'px',
-                  marginLeft: -pointRadius + 'px',
-                  marginTop: -pointRadius + 'px',
-                }"
-                tabindex="0"
-                @click="onSelect(pt.r)"
-              />
-            </template>
-          </v-tooltip>
+          <div class="graph__avg-line"></div>
+          <canvas
+            ref="canvasEl"
+            class="graph-canvas"
+            :class="{ 'is-hovering': !!hoverState }"
+            :width="canvasPixelWidth"
+            :height="canvasPixelHeight"
+            :style="{ width: displayGraphWidth + 'px', height: graphHeight + 'px' }"
+          ></canvas>
         </div>
       </div>
+      <teleport to="body">
+        <div
+          v-if="hoverState"
+          class="graph-tooltip graph-tooltip-global"
+          :style="{ left: hoverState.globalX + 'px', top: hoverState.globalY + 'px' }"
+          role="tooltip"
+        >
+          {{ hoverState.text }}
+        </div>
+      </teleport>
     </div>
   </v-card>
 </template>
@@ -110,7 +101,7 @@ const emit = defineEmits<{
 }>()
 
 const {
-  data: reports,
+  data: reportList,
   isPending,
   isError,
   error: loadError,
@@ -129,7 +120,7 @@ function refreshReports() {
 defineExpose({ requestRefresh: refreshReports })
 
 const reportsSorted = computed(() =>
-  [...(reports?.value ?? [])].sort(
+  [...(reportList?.value?.reports ?? [])].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   ),
 )
@@ -169,20 +160,14 @@ const recentDurationFormatted = computed(() =>
   formatDurationDetailed(parseDuration(recentCompletion.value?.duration)),
 )
 
-const fastestCompletion = computed(() => {
-  if (!completedReports.value.length) return undefined
-  return completedReports.value.reduce((min, cur) =>
-    cur.duration < (min?.duration ?? Number.MAX_SAFE_INTEGER) ? cur : min,
-  )
-})
+const fastestCompletion = computed(() => reportList.value?.best || undefined)
 const fastestDurationFormatted = computed(() =>
   formatDurationDetailed(parseDuration(fastestCompletion.value?.duration)),
 )
-
 const averageDurationFormatted = computed(() => {
-  if (!completedReports.value.length) return '-'
-  const total = completedReports.value.reduce((sum, r) => sum + parseDuration(r.duration), 0)
-  return formatDurationDetailed(Math.round(total / completedReports.value.length))
+  const raw = reportList.value?.average
+  if (!raw) return '-'
+  return formatDurationDetailed(parseDuration(raw))
 })
 
 watch(
@@ -218,6 +203,16 @@ function onSelect(r: ActivityReportDTO) {
 
 const graphEl = ref<HTMLElement | null>(null)
 const graphWrapperEl = ref<HTMLElement | null>(null)
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+const devicePixelRatioRef = ref(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+const hoverState = ref<null | {
+  x: number
+  y: number
+  globalX: number
+  globalY: number
+  text: string
+  r: ActivityReportDTO
+}>(null)
 
 const durationDomain = computed(() => {
   const source = reportsSorted.value
@@ -241,7 +236,14 @@ const baseGraphWidth = computed(() =>
     : 0,
 )
 const wrapperWidth = ref(0)
+// Width occupied by the plotted points themselves (does not stretch)
 const graphContentWidth = computed(() => baseGraphWidth.value)
+// Display width: we allow the average line (and canvas) to extend to at least the wrapper width
+// while keeping the original point spacing unscaled. Points keep their x based on graphContentWidth.
+const displayGraphWidth = computed(() => {
+  if (!wrapperWidth.value) return graphContentWidth.value
+  return Math.max(graphContentWidth.value, wrapperWidth.value)
+})
 
 const maxDeviation = computed(() => {
   if (!reportsSorted.value.length) return 0
@@ -264,6 +266,108 @@ const pointsPlottable = computed(() =>
   }),
 )
 
+const canvasPixelWidth = computed(() =>
+  Math.max(1, Math.floor(displayGraphWidth.value * devicePixelRatioRef.value)),
+)
+const canvasPixelHeight = computed(() =>
+  Math.max(1, Math.floor(graphHeight * devicePixelRatioRef.value)),
+)
+
+function drawCanvas() {
+  const canvas = canvasEl.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const dpr = devicePixelRatioRef.value
+  ctx.reset?.()
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.save()
+  if (dpr !== 1) ctx.scale(dpr, dpr)
+  const pts = pointsPlottable.value
+  if (!pts.length) {
+    ctx.restore()
+    return
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, pointRadius, 0, Math.PI * 2)
+    ctx.fillStyle = p.isCompleted ? '#27ae60' : '#c0392b'
+    ctx.fill()
+  }
+  if (hoverState.value) {
+    const p = hoverState.value
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, pointRadius + 3, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, pointRadius, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+interface PlotPoint {
+  r: ActivityReportDTO
+  x: number
+  y: number
+  duration: number
+  deviation: number
+  isCompleted: boolean
+}
+function findPointAt(x: number, y: number) {
+  const pts: PlotPoint[] = pointsPlottable.value as PlotPoint[]
+  const r = pointRadius + 5
+  let hit: PlotPoint | null = null
+  let minDist = Infinity
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]
+    const dx = x - p.x
+    const dy = y - p.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist <= r && dist < minDist) {
+      hit = p
+      minDist = dist
+    }
+  }
+  return hit
+}
+
+function handlePointerMove(ev: MouseEvent) {
+  const canvas = canvasEl.value
+  if (!canvas) return
+  const rect = canvas.getBoundingClientRect()
+  const dpr = devicePixelRatioRef.value
+  const x = (ev.clientX - rect.left) * (1 / dpr)
+  const y = (ev.clientY - rect.top) * (1 / dpr)
+  const found = findPointAt(x, y)
+  if (found) {
+    hoverState.value = {
+      x: found.x,
+      y: found.y,
+      globalX: rect.left + found.x,
+      globalY: rect.top + found.y - (pointRadius + 4),
+      text: dotTooltip(found.r),
+      r: found.r,
+    }
+  } else {
+    hoverState.value = null
+  }
+  drawCanvas()
+}
+
+function handlePointerLeave() {
+  hoverState.value = null
+  drawCanvas()
+}
+
+function handleClick() {
+  if (hoverState.value) onSelect(hoverState.value.r)
+}
+
 const graphVars = computed(() => ({
   '--graph-height': graphHeight + 'px',
 }))
@@ -283,7 +387,7 @@ function updateScrollable() {
   if (!graphWrapperEl.value) return
   wrapperWidth.value = graphWrapperEl.value.clientWidth
   const tolerance = 2
-  isScrollable.value = baseGraphWidth.value > wrapperWidth.value + tolerance
+  isScrollable.value = graphContentWidth.value > wrapperWidth.value + tolerance
   if (!isScrollable.value) {
     graphWrapperEl.value.scrollLeft = 0
   }
@@ -312,6 +416,7 @@ function beginGraphCompute() {
   nextTick(() => {
     requestAnimationFrame(() => {
       isGraphComputing.value = false
+      drawCanvas()
     })
   })
 }
@@ -321,12 +426,17 @@ watch(pointsPlottable, async () => {
   await nextTick()
   updateScrollable()
   scrollToRight()
+  requestAnimationFrame(drawCanvas)
 })
 
 onMounted(async () => {
   beginGraphCompute()
   updateScrollable()
   scrollToRight()
+  const c = canvasEl.value
+  c?.addEventListener('mousemove', handlePointerMove)
+  c?.addEventListener('mouseleave', handlePointerLeave)
+  c?.addEventListener('click', handleClick)
   graphWrapperEl.value?.addEventListener('scroll', updateEdgeState, { passive: true })
   window.addEventListener('resize', updateScrollable)
 })
@@ -346,6 +456,10 @@ watch(
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateScrollable)
   graphWrapperEl.value?.removeEventListener('scroll', updateEdgeState)
+  const c = canvasEl.value
+  c?.removeEventListener('mousemove', handlePointerMove)
+  c?.removeEventListener('mouseleave', handlePointerLeave)
+  c?.removeEventListener('click', handleClick)
 })
 </script>
 
@@ -501,9 +615,10 @@ onBeforeUnmount(() => {
 .graph__avg-line {
   position: absolute;
   left: 0;
+  top: 50%;
   width: 100%;
   height: 0;
-  border-top: 2px solid var(--color-border-strong, rgba(255, 255, 255, 0.6));
+  border-top: 2px solid var(--color-border-strong, rgba(255, 255, 255, 0.45));
   pointer-events: none;
   z-index: 1;
 }
@@ -556,6 +671,47 @@ onBeforeUnmount(() => {
 }
 .graph__point:focus-visible {
   outline: none;
+}
+.graph-canvas {
+  position: relative;
+  display: block;
+  z-index: 2;
+}
+.graph-canvas.is-hovering {
+  cursor: pointer;
+}
+.graph-hit-anchor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 1px;
+  height: 1px;
+  z-index: 3;
+}
+.graph-point-tooltip {
+  z-index: 4;
+}
+.graph-shell::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+.graph-tooltip {
+  position: absolute;
+  background: #0c0f14;
+  color: #f5f8fa;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  padding: 3px 6px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 7;
+  box-shadow:
+    0 4px 10px -2px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.graph-tooltip-global {
+  position: fixed;
 }
 :deep(.graph-point-tooltip) {
   background: #0c0f14 !important;

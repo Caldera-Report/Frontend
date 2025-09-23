@@ -10,7 +10,7 @@ import {
   getTotalTimeLeaderboard,
 } from '@/api/api/caldera-report-api'
 import { getPGCR, getActivitiesBungie, getClanForUser } from '@/api/http/bungieClient'
-import type { ActivityReportDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
+import type { ActivityReportListDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import {
   type DestinyActivityDefinition,
@@ -75,7 +75,7 @@ export const usePlayerReportsForActivity = (
   activityId: string,
   enabled?: boolean | import('vue').Ref<boolean>,
 ) => {
-  return useQuery<ActivityReportDTO[]>({
+  return useQuery<ActivityReportListDTO>({
     queryKey: ['playerReports', playerId, activityId],
     queryFn: () => getPlayerReportsForActivity(playerId, activityId),
     staleTime: 5 * 60_000,
