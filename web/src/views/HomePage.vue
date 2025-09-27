@@ -1,11 +1,12 @@
 <template>
+  <title>Caldera Report</title>
   <div class="home">
     <section class="hero minimal">
       <div class="hero-inner">
         <div class="branding">
           <h1>Caldera Report</h1>
           <p class="tagline">
-            Raid & dungeon insights, player stats, and activity analytics in one place.
+            Portal activity insights, player stats, and activity analytics in one place.
           </p>
           <div class="cta-row">
             <v-btn
