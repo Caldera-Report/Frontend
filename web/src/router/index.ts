@@ -1,7 +1,7 @@
 import ActivityReport from '@/views/ActivityReport.vue'
 import HomePage from '@/views/HomePage.vue'
 import Leaderboard from '@/views/Leaderboard.vue'
-import Player from '@/views/Player.vue'
+import Player from '@/views/PlayerView.vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({

@@ -3,55 +3,86 @@
   <div class="leaderboard-layout">
     <h1 class="page-title">Leaderboards</h1>
     <div class="leaderboard-controls">
-      <v-select
-        v-model="selectedType"
-        :items="leaderboardTypeItems"
-        item-title="label"
-        item-value="value"
-        label="Leaderboard Type"
-        density="comfortable"
-        variant="outlined"
-        class="form-control"
-      />
-      <v-text-field
-        v-model="searchTerm"
-        label="Search players..."
-        density="comfortable"
-        variant="outlined"
-        hide-details
-        clearable
-        class="form-control search-box"
-      >
-        <template #prepend-inner>
-          <v-icon size="18">mdi-magnify</v-icon>
-        </template>
-      </v-text-field>
-      <v-autocomplete
-        v-model="selectedActivityId"
-        :items="activityItems"
-        item-title="label"
-        item-value="value"
-        label="Activity"
-        density="comfortable"
-        variant="outlined"
-        class="form-control"
-        :loading="activitiesPending"
-        :search="activitySearch"
-        placeholder="Search activity..."
-      >
-        <template #item="{ props: itemProps, index, item }">
-          <template v-if="shouldShowSubheader(index, item.raw.group)">
-            <v-list-subheader class="group-header">{{ item.raw.group }}</v-list-subheader>
-          </template>
-          <v-list-item v-bind="itemProps" :title="item.raw.label" />
-        </template>
-      </v-autocomplete>
+      <div class="controls-top">
+        <label class="group-label" for="lb-search">Search</label>
+        <v-text-field
+          id="lb-search"
+          v-model="searchTerm"
+          placeholder="Search players by name..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          clearable
+          class="control-search"
+        />
+      </div>
+      <div class="controls-bottom">
+        <div class="field activity-field">
+          <label class="group-label" for="lb-activity">Activity</label>
+          <v-autocomplete
+            id="lb-activity"
+            v-model="selectedActivityId"
+            :items="activityItems"
+            item-title="label"
+            item-value="value"
+            variant="outlined"
+            density="comfortable"
+            class="control-activity"
+            :loading="activitiesPending"
+            :search="activitySearch"
+            placeholder="Filter / search activities..."
+            hide-details
+            clearable
+          >
+            <template #item="{ props: itemProps, index, item }">
+              <template v-if="shouldShowSubheader(index, item.raw.group)">
+                <v-list-subheader class="group-header">{{ item.raw.group }}</v-list-subheader>
+              </template>
+              <v-list-item v-bind="itemProps" :title="item.raw.label" />
+            </template>
+          </v-autocomplete>
+        </div>
+        <div class="field type-field" role="group" aria-label="Leaderboard type">
+          <label class="group-label">Type</label>
+          <v-btn-toggle
+            v-model="selectedType"
+            mandatory
+            class="type-toggle"
+            density="comfortable"
+            variant="outlined"
+            divided
+          >
+            <v-btn
+              value="completions"
+              :aria-pressed="selectedType === 'completions'"
+              prepend-icon="mdi-flag-checkered"
+            >
+              <span class="btn-text">Completions</span>
+            </v-btn>
+            <v-btn
+              value="besttimes"
+              :aria-pressed="selectedType === 'besttimes'"
+              prepend-icon="mdi-timer-outline"
+            >
+              <span class="btn-text">Best</span>
+            </v-btn>
+            <v-btn
+              value="totaltime"
+              :aria-pressed="selectedType === 'totaltime'"
+              prepend-icon="mdi-timer-sand-complete"
+            >
+              <span class="btn-text">Total</span>
+            </v-btn>
+          </v-btn-toggle>
+        </div>
+      </div>
     </div>
 
     <v-progress-linear v-if="isPending" indeterminate color="primary" height="4" class="mb-4" />
 
     <v-alert v-if="!isPending && isError" type="error" variant="tonal" class="mb-4">
-      {{ errorMessage || (error && (error as Error).message) }}
+      {{ (error && (error as Error).message) || 'Failed to load leaderboard' }}
     </v-alert>
 
     <div v-if="rows.length" class="leaderboard-table-wrapper" ref="tableWrapper" @scroll="onScroll">
@@ -65,8 +96,19 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, idx) in displayedRows" :key="row.player.id">
-            <td class="rank-col">{{ idx + 1 }}</td>
+          <tr
+            v-for="row in displayedRows"
+            :key="row.player.id"
+            :class="['lb-row', { 'has-bg': row.player.lastPlayedCharacterBackgroundPath }]"
+            :style="
+              row.player.lastPlayedCharacterBackgroundPath
+                ? {
+                    '--player-bg': `url(https://www.bungie.net${row.player.lastPlayedCharacterBackgroundPath})`,
+                  }
+                : undefined
+            "
+          >
+            <td class="rank-col">{{ rankLookup.get(row.player.id) ?? '' }}</td>
             <td
               class="player-col player-cell"
               role="button"
@@ -77,18 +119,8 @@
               :aria-label="`View profile for ${row.player.fullDisplayName}`"
             >
               <div class="player-name-block">
-                <v-avatar v-if="row.player.lastPlayedCharacterEmblemPath" size="28" class="mr-2">
-                  <v-img
-                    :src="'https://www.bungie.net' + row.player.lastPlayedCharacterEmblemPath"
-                    :alt="row.player.fullDisplayName"
-                    cover
-                  />
-                </v-avatar>
                 <div class="names">
                   <div class="primary" v-html="highlight(row.player.fullDisplayName)"></div>
-                  <div v-if="row.player.displayNameCode" class="secondary">
-                    {{ row.player.displayName }}#{{ row.player.displayNameCode }}
-                  </div>
                 </div>
               </div>
             </td>
@@ -102,7 +134,6 @@
     <div v-else-if="!isPending && !isError" class="empty-state">
       <span>No data available.</span>
     </div>
-    <ErrorSnackbar v-model="showErrorSnack" :message="errorMessage" />
   </div>
 </template>
 
@@ -115,7 +146,7 @@ import type {
   CompletionsLeaderBoardResponse,
   PlayerDTO,
 } from '@/api/models'
-import ErrorSnackbar from '@/components/ErrorSnackbar.vue'
+import { showGlobalError } from '@/hooks/useGlobalError'
 
 defineOptions({ name: 'LeaderboardsView' })
 const props = defineProps<{ type?: string; activityId?: string }>()
@@ -179,13 +210,9 @@ const isPending = computed(() => leaderboardQuery.isPending.value || activitiesP
 const isError = computed(() => leaderboardQuery.isError.value || activitiesError.value || false)
 const error = computed(() => leaderboardQuery.error.value || activitiesErrObj.value || null)
 
-const showErrorSnack = ref(false)
-const errorMessage = ref('')
-
 watch([isError, error], ([errState, errObj], [prevErrState]) => {
-  if (errState && errObj && (errState !== prevErrState || showErrorSnack.value === false)) {
-    errorMessage.value = (errObj as Error).message || 'Failed to load leaderboard'
-    showErrorSnack.value = true
+  if (errState && errObj && errState !== prevErrState) {
+    showGlobalError(errObj, 'Failed to load leaderboard')
   }
 })
 
@@ -196,6 +223,12 @@ const rows = computed<LeaderboardRow[]>(() => {
   const data = activeQuery.value.data.value
   if (!data) return []
   return data as LeaderboardRow[]
+})
+
+const rankLookup = computed(() => {
+  const map = new Map<string, number>()
+  rows.value.forEach((r, i) => map.set(r.player.id, i + 1))
+  return map
 })
 
 const searchTerm = ref('')
@@ -287,10 +320,105 @@ function goToPlayer(player: PlayerDTO) {
   gap: var(--space-10);
 }
 .leaderboard-controls {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-6)) var(--space-2);
+  backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 28px -8px rgba(0, 0, 0, 0.55);
+}
+.leaderboard-controls .group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+  margin-bottom: 4px;
+  display: inline-block;
+}
+.leaderboard-controls .controls-top {
+  display: flex;
+  flex-direction: column;
+}
+.leaderboard-controls .controls-top .control-search :deep(input) {
+  font-variant-numeric: normal;
+}
+.leaderboard-controls .controls-bottom {
+  display: flex;
+  gap: var(--space-5);
   align-items: flex-end;
+  flex-wrap: wrap;
+}
+.leaderboard-controls .controls-bottom .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.leaderboard-controls .activity-field {
+  flex: 1 1 520px;
+  min-width: 260px;
+}
+.leaderboard-controls .type-field {
+  flex: 0 0 auto;
+}
+.leaderboard-controls .type-toggle :deep(.v-btn) {
+  text-transform: none;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+}
+.leaderboard-controls .type-toggle :deep(.v-btn .v-btn__prepend) {
+  margin-inline-end: 4px;
+}
+.leaderboard-controls .type-toggle :deep(.v-btn.v-btn--active) {
+  background: rgba(120, 140, 255, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(140, 160, 255, 0.35);
+}
+.leaderboard-controls .type-toggle :deep(.v-btn:not(.v-btn--active):hover) {
+  background: rgba(255, 255, 255, 0.06);
+}
+.leaderboard-controls .btn-text {
+  position: relative;
+  top: -1px;
+}
+.leaderboard-controls .control-search {
+  --search-height: 46px;
+}
+.leaderboard-controls .control-search :deep(.v-field) {
+  min-height: var(--search-height);
+}
+.leaderboard-controls .control-activity :deep(.v-field) {
+  min-height: 46px;
+}
+@media (max-width: 880px) {
+  .leaderboard-controls {
+    padding: var(--space-5) var(--space-5) var(--space-5);
+  }
+  .leaderboard-controls .controls-bottom {
+    gap: var(--space-4);
+  }
+}
+@media (max-width: 620px) {
+  .leaderboard-controls {
+    position: static;
+    margin: 0 0 var(--space-4);
+  }
+  .leaderboard-controls .controls-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .leaderboard-controls .activity-field,
+  .leaderboard-controls .type-field {
+    width: 100%;
+  }
+  .leaderboard-controls .type-field {
+    padding-top: 4px;
+  }
 }
 .leaderboard-table-wrapper {
   overflow: auto;
@@ -306,11 +434,61 @@ function goToPlayer(player: PlayerDTO) {
 }
 .leaderboard-table-wrapper mark {
   background: var(--color-mark-bg);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.lb-row {
+  position: relative;
+}
+.lb-row.has-bg {
+  color: var(--color-text-on-image, #f5f6f9);
+}
+.lb-row.has-bg {
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(10, 10, 14, 0.78),
+      rgba(10, 10, 14, 0.46) 55%,
+      rgba(10, 10, 14, 0.18)
+    ),
+    var(--player-bg);
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat;
+  filter: saturate(1.08);
+}
+.lb-row.has-bg:hover {
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(10, 10, 14, 0.9),
+      rgba(10, 10, 14, 0.6) 55%,
+      rgba(10, 10, 14, 0.25)
+    ),
+    var(--player-bg);
+}
+.lb-row > td {
+  position: relative;
+  padding: 20px 16px;
+}
+.lb-row:not(.has-bg):hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.lb-row + .lb-row > td {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.lb-row.has-bg + .lb-row.has-bg > td {
+  border-top-color: rgba(255, 255, 255, 0.15);
+}
+.lb-row.has-bg mark {
+  background: rgba(255, 255, 255, 0.18);
 }
 .rank-col {
   width: 56px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  padding-right: 12px;
 }
 .player-cell {
   cursor: pointer;
@@ -327,6 +505,7 @@ function goToPlayer(player: PlayerDTO) {
 }
 .player-name-block .names {
   display: flex;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   flex-direction: column;
   line-height: 1.05;
 }
@@ -337,23 +516,46 @@ function goToPlayer(player: PlayerDTO) {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 260px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
-.player-name-block .secondary {
-  font-size: var(--text-xs);
-  opacity: 0.65;
-}
-.stat-col {
-  width: 160px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-@media (max-width: 860px) {
-  .leaderboard-controls {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 1080px) {
+  .leaderboard-controls .controls-row {
+    flex-wrap: wrap;
   }
-  .leaderboard-controls .form-control {
+  .leaderboard-controls .control-search {
+    flex: 1 1 100%;
+    order: 1;
+  }
+  .leaderboard-controls .control-activity {
+    flex: 2 1 60%;
+    order: 2;
+  }
+  .leaderboard-controls .control-type-toggle {
+    order: 3;
+  }
+}
+@media (max-width: 640px) {
+  .leaderboard-controls .controls-row {
+    flex-direction: column;
+  }
+  .leaderboard-controls .control-search,
+  .leaderboard-controls .control-activity,
+  .leaderboard-controls .control-type-toggle {
     width: 100%;
+  }
+  .leaderboard-controls .control-type-toggle {
+    align-items: flex-start;
+  }
+  .leaderboard-controls .type-label {
+    padding-left: 4px;
+  }
+  .player-name-block .primary {
+    max-width: 180px;
+  }
+}
+@media (max-width: 420px) {
+  .player-name-block .primary {
+    max-width: 140px;
   }
 }
 </style>

@@ -13,44 +13,34 @@
         height="3"
         class="mb-1"
       />
-      <div class="activity-stats-row plain">
-        <div class="stat-group-left">
-          <span class="stat-label">Total Clears:</span>
-          <span class="stat-value strong">{{ totalClears }}</span>
+      <div class="activity-stats-blocks">
+        <div class="stat-block stat-block-clears" :title="totalClears + ' total clears'">
+          <div class="stat-block__value stat-clears monospace">{{ totalClears }}</div>
+          <div class="stat-block__label">Total Clears</div>
         </div>
-        <div class="stat-group-right">
-          <router-link
-            v-if="recentCompletion"
-            :to="`/activityreport/${recentCompletion.instanceId}`"
-            class="stat-pair"
-            :title="dotTooltip(recentCompletion)"
-          >
-            <span class="stat-label">Recent</span>
-            <span class="stat-value">{{ recentDurationFormatted }}</span>
-          </router-link>
-          <div v-else class="stat-pair">
-            <span class="stat-label">Recent</span>
-            <span class="stat-value">{{ recentDurationFormatted }}</span>
-          </div>
-          <div class="divider-dot"></div>
-          <router-link
-            v-if="fastestCompletion"
-            :to="`/activityreport/${fastestCompletion.instanceId}`"
-            class="stat-pair"
-            :title="dotTooltip(fastestCompletion)"
-          >
-            <span class="stat-label">Fastest</span>
-            <span class="stat-value">{{ fastestDurationFormatted }}</span>
-          </router-link>
-          <div v-else class="stat-pair">
-            <span class="stat-label">Fastest</span>
-            <span class="stat-value">{{ fastestDurationFormatted }}</span>
-          </div>
-          <div class="divider-dot"></div>
-          <div class="stat-pair">
-            <span class="stat-label">Average</span>
-            <span class="stat-value">{{ averageDurationFormatted }}</span>
-          </div>
+        <component
+          :is="recentCompletion ? 'router-link' : 'div'"
+          :to="recentCompletion ? `/activityreport/${recentCompletion.instanceId}` : undefined"
+          class="stat-block"
+          :class="{ 'is-link': !!recentCompletion }"
+          :title="recentCompletion ? dotTooltip(recentCompletion) : 'Recent completion'"
+        >
+          <div class="stat-block__value monospace">{{ recentDurationFormatted }}</div>
+          <div class="stat-block__label">Recent</div>
+        </component>
+        <component
+          :is="fastestCompletion ? 'router-link' : 'div'"
+          :to="fastestCompletion ? `/activityreport/${fastestCompletion.instanceId}` : undefined"
+          class="stat-block"
+          :class="{ 'is-link': !!fastestCompletion }"
+          :title="fastestCompletion ? dotTooltip(fastestCompletion) : 'Fastest completion'"
+        >
+          <div class="stat-block__value monospace">{{ fastestDurationFormatted }}</div>
+          <div class="stat-block__label">Fastest</div>
+        </component>
+        <div class="stat-block" :title="'Average duration'">
+          <div class="stat-block__value monospace">{{ averageDurationFormatted }}</div>
+          <div class="stat-block__label">Average</div>
         </div>
       </div>
       <div
@@ -102,6 +92,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePlayerReportsForActivity } from '@/hooks'
 import type { ActivityReportDTO } from '@/api/models'
 
@@ -215,8 +206,10 @@ function dotTooltip(r: ActivityReportDTO) {
   return `${formatDurationDetailed(parseDuration(r.duration))} • ${timeAgo(r.date)}`
 }
 
+const router = useRouter()
+
 function onSelect(r: ActivityReportDTO) {
-  window.location.href = `/activityreport/${r.instanceId}`
+  router.push(`/activityreport/${r.instanceId}`)
 }
 
 const graphEl = ref<HTMLElement | null>(null)
@@ -254,10 +247,7 @@ const baseGraphWidth = computed(() =>
     : 0,
 )
 const wrapperWidth = ref(0)
-// Width occupied by the plotted points themselves (does not stretch)
 const graphContentWidth = computed(() => baseGraphWidth.value)
-// Display width: we allow the average line (and canvas) to extend to at least the wrapper width
-// while keeping the original point spacing unscaled. Points keep their x based on graphContentWidth.
 const displayGraphWidth = computed(() => {
   if (!wrapperWidth.value) return graphContentWidth.value
   return Math.max(graphContentWidth.value, wrapperWidth.value)
@@ -508,6 +498,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  align-items: center;
   padding: var(--space-8) var(--space-8) var(--space-6);
   z-index: 2;
 }
@@ -519,6 +510,8 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   color: var(--color-text);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  width: 100%;
 }
 .activity-card-new__body {
   padding: 0.75rem 0.85rem 1rem;
@@ -526,52 +519,82 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 0.75rem;
 }
-.activity-stats-row.plain {
+.activity-stats-blocks {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 1.1rem;
+  align-items: center;
   flex-wrap: wrap;
-  align-items: baseline;
-  padding: 2px 4px;
-  font-size: 0.8rem;
-  letter-spacing: 0.3px;
+  padding: 2px 2px 2px;
 }
-.stat-group-left {
-  display: flex;
-  gap: 0.4rem;
-  align-items: baseline;
-}
-.stat-group-right {
-  display: flex;
-  gap: 0.85rem;
-  flex-wrap: wrap;
-  align-items: baseline;
-}
-.stat-label {
-  text-transform: uppercase;
-  opacity: 0.6;
-  font-size: 0.65rem;
-  letter-spacing: 0.6px;
-}
-.stat-value {
-  font-weight: 600;
-}
-.stat-value.strong {
-  font-size: 1.1rem;
-}
-.stat-pair {
+.stat-block {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
+  text-decoration: none;
+  min-width: 60px;
+  align-items: center;
+  text-align: center;
 }
-.divider-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--color-border);
-  align-self: center;
-  opacity: 0.55;
-  margin-top: 2px;
+.stat-block__value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.35px;
+  line-height: 1.05;
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    'Liberation Mono',
+    monospace
+  );
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.stat-block-clears .stat-block__value.stat-clears {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 0.85;
+  margin-bottom: 2px;
+  color: var(--color-text);
+}
+.stat-block__label {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.95px;
+  opacity: 0.6;
+  font-weight: 600;
+  line-height: 1.05;
+}
+.stat-block.is-link {
+  cursor: pointer;
+  color: inherit;
+}
+.stat-block.is-link .stat-block__value {
+  transition: filter 0.18s ease;
+}
+.stat-block.is-link:hover .stat-block__value,
+.stat-block.is-link:focus-visible .stat-block__value {
+  color: var(--color-accent, #f1c40f);
+  filter: none;
+}
+.stat-block.is-link:focus-visible {
+  outline: 2px solid rgba(var(--color-accent-rgb) / 0.75);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (max-width: 640px) {
+  .activity-stats-blocks {
+    gap: 0.9rem;
+  }
+  .stat-block-clears .stat-block__value.stat-clears {
+    font-size: 1.85rem;
+  }
+  .stat-block__value {
+    font-size: 0.9rem;
+  }
 }
 .graph-shell {
   position: relative;
@@ -583,6 +606,10 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
   padding: 6px 4px;
   scrollbar-width: thin;
+  --scrollbar-thumb: var(--color-accent-inactive);
+  --scrollbar-thumb-hover: var(--color-accent);
+  --scrollbar-track: transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .graph-shell.is-loading {
   min-height: var(--graph-height, 76px);
@@ -597,11 +624,18 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 .graph-shell::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 .graph-shell::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--scrollbar-thumb-hover);
+}
+.graph-shell:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-hover);
+}
+.graph-shell:hover {
+  --scrollbar-thumb: var(--scrollbar-thumb-hover);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .graph-shell.is-scrollable {
   --fade-size: 28px;
@@ -639,56 +673,6 @@ onBeforeUnmount(() => {
   pointer-events: none;
   z-index: 1;
 }
-.graph__point {
-  z-index: 3;
-  position: absolute;
-  top: 0;
-  left: 0;
-  border-radius: 50%;
-  background: var(--color-accent, #888);
-  cursor: pointer;
-  box-shadow:
-    0 0 0 1px #000,
-    0 0 0 2px rgba(0, 0, 0, 0.4);
-  transition:
-    transform 0.15s ease,
-    background-color 0.2s;
-}
-.graph__point.is-completed {
-  background: #27ae60;
-}
-.graph__point.is-incomplete {
-  background: #c0392b;
-}
-.graph__point:hover {
-  z-index: 3;
-  box-shadow:
-    0 0 0 1px #000,
-    0 0 0 3px rgba(0, 0, 0, 0.5);
-}
-.graph__point::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.05);
-  pointer-events: none;
-  opacity: 0;
-  transform: scale(0.6);
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease,
-    border-color 0.25s ease;
-}
-.graph__point:hover::after,
-.graph__point:focus-visible::after {
-  opacity: 1;
-  transform: scale(1);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-.graph__point:focus-visible {
-  outline: none;
-}
 .graph-canvas {
   position: relative;
   display: block;
@@ -696,19 +680,6 @@ onBeforeUnmount(() => {
 }
 .graph-canvas.is-hovering {
   cursor: pointer;
-}
-.graph-hit-anchor {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 1px;
-  height: 1px;
-  z-index: 3;
-}
-.graph-point-tooltip {
-  z-index: 4;
-}
-.graph-shell::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
 }
 .graph-tooltip {
   position: absolute;
@@ -730,43 +701,12 @@ onBeforeUnmount(() => {
 .graph-tooltip-global {
   position: fixed;
 }
-:deep(.graph-point-tooltip) {
-  background: #0c0f14 !important;
-  color: #f5f8fa !important;
-  font-size: 0.65rem !important;
-  line-height: 1.25 !important;
-  padding: 4px 6px 5px !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 4px !important;
-  box-shadow:
-    0 4px 10px -2px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.04) !important;
-  letter-spacing: 0.3px;
-}
-:deep(.graph-point-tooltip .v-overlay__content) {
-  padding: 0 !important;
-}
-.error-state {
-  background: rgba(231, 76, 60, 0.1);
-  border: 1px solid #e74c3c33;
-  padding: 4px 6px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  gap: 0.5rem;
-  margin-bottom: 4px;
-}
-.error-text {
-  color: #ffb4ac;
-}
 @media (max-width: 600px) {
   .stat-group-right {
     gap: 0.65rem;
   }
   .activity-card-new__banner {
     height: 140px;
-  }
-  .activity-stats-row {
-    flex-direction: column;
   }
 }
 </style>

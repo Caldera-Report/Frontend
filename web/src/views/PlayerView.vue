@@ -63,7 +63,6 @@
       </v-window-item>
     </v-window>
   </div>
-  <ErrorSnackbar v-model="showErrorSnack" :message="errorMessage" />
 </template>
 
 <script setup lang="ts">
@@ -73,8 +72,8 @@ import {
   usePlayer,
   useUpdatePlayerActivityReports,
 } from '@/hooks'
-import { computed, ref, watch } from 'vue'
-import ErrorSnackbar from '@/components/ErrorSnackbar.vue'
+import { computed, ref, watch, toRef } from 'vue'
+import { showGlobalError } from '@/hooks/useGlobalError'
 import ActivityCard from '@/components/ActivityCard.vue'
 import type { ActivityReportDTO, ActivityDTO } from '@/api/models'
 
@@ -85,9 +84,6 @@ const props = defineProps<{
 type ActivityCardInstance = InstanceType<typeof ActivityCard>
 const activityCards = ref<ActivityCardInstance[]>([])
 
-const showErrorSnack = ref(false)
-const errorMessage = ref('')
-
 const selectedTab = ref(0)
 const isInitialUpdateDone = ref(false)
 
@@ -97,11 +93,12 @@ const {
   isError: isActivitiesError,
 } = useAllActivities()
 
+const membershipIdRef = toRef(props, 'membershipId')
 const {
   data: player,
   isPending: isPlayerPending,
   isError: isPlayerError,
-} = usePlayer(props.membershipId)
+} = usePlayer(membershipIdRef)
 
 const {
   mutateAsync: updatePlayerReports,
@@ -116,7 +113,7 @@ const {
   data: playerClan,
   isPending: isClanPending,
   isError: isClanError,
-} = useClanForUser(props.membershipId, membershipType)
+} = useClanForUser(membershipIdRef, membershipType)
 
 const isPending = computed(
   () =>
@@ -137,9 +134,9 @@ const heroStyle = computed(() => {
   }
 })
 
-watch([isError, errorMessage], ([errState, msg], [prevErrState]) => {
-  if (errState && msg && (errState !== prevErrState || showErrorSnack.value === false)) {
-    showErrorSnack.value = true
+watch(isError, (v, prev) => {
+  if (v && v !== prev) {
+    showGlobalError('An error occurred loading player data')
   }
 })
 
@@ -155,26 +152,23 @@ function sortedActivities(opType: { activities?: ActivityDTO[] }) {
 async function handleRefresh() {
   if (!player?.value?.id) return
   try {
-    errorMessage.value = ''
     await updatePlayerReports(player.value.id)
     isInitialUpdateDone.value = true
   } catch (e) {
-    errorMessage.value = (e as Error)?.message || 'Failed to refresh player reports'
+    showGlobalError(e, 'Failed to refresh player reports')
   }
 }
 
-const unwatchAutoRefresh = watch(
-  () => player.value?.id,
+watch(
+  membershipIdRef,
   async (id) => {
     if (!id) return
+    isInitialUpdateDone.value = false
     try {
-      errorMessage.value = ''
       await updatePlayerReports(id)
       isInitialUpdateDone.value = true
     } catch (e) {
-      errorMessage.value = (e as Error)?.message || 'Failed to refresh player reports'
-    } finally {
-      unwatchAutoRefresh()
+      showGlobalError(e, 'Failed to refresh player reports')
     }
   },
   { immediate: true },
@@ -184,7 +178,7 @@ watch(
   () => isUpdateError.value,
   (v) => {
     if (v && updateError.value) {
-      errorMessage.value = (updateError.value as Error).message || 'Failed to refresh'
+      showGlobalError(updateError.value, 'Failed to refresh')
     }
   },
 )

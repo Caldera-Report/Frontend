@@ -46,7 +46,8 @@
                 :active="i === activeIndex"
                 :color="i === activeIndex ? 'primary' : undefined"
                 @mouseenter="activeIndex = i"
-                @mousedown.prevent="selectPlayer(p)"
+                :to="`/player/${p.id}`"
+                @click="onItemClick(p)"
               >
                 <v-list-item-title>
                   <span v-html="highlight(p.fullDisplayName)"></span>
@@ -69,20 +70,17 @@
         </v-card>
       </div>
     </div>
-    <ErrorSnackbar v-model="showErrorSnack" :message="errorMessage" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { type PlayerDTO } from '@/api/models'
 import { usePlayers, useSearchPlayer } from '@/hooks'
-import ErrorSnackbar from './ErrorSnackbar.vue'
+import { showGlobalError } from '@/hooks/useGlobalError'
 
-const props = defineProps<{ enableRemoteSearch?: boolean }>()
-const enableRemoteSearch = computed(() => props.enableRemoteSearch !== false)
-
-const emit = defineEmits<{ (e: 'select', player: PlayerDTO): void }>()
+const router = useRouter()
 
 const search = ref('')
 const selectedPlayer = ref<PlayerDTO | null>(null)
@@ -108,7 +106,7 @@ const {
   error: playersError,
 } = usePlayers()
 
-const searchMutation = enableRemoteSearch.value ? useSearchPlayer() : null
+const searchMutation = useSearchPlayer()
 
 const searchPlayers = async (term: string) => {
   if (!searchMutation) return [] as PlayerDTO[]
@@ -122,8 +120,6 @@ const searchError = computed(() => (searchMutation ? searchMutation.error.value 
 const isPending = computed(() => isPlayersPending.value || isSearchPending.value)
 const isError = computed(() => isPlayersError.value || isSearchError.value)
 const error = computed(() => playersError.value || searchError.value)
-
-const showErrorSnack = ref(false)
 
 watch(playersData, (val) => {
   if (val) {
@@ -243,7 +239,13 @@ function selectPlayer(p: PlayerDTO) {
   selectedPlayer.value = p
   addRecent(p)
   search.value = p.fullDisplayName || p.displayName
-  emit('select', p)
+  router.push(`/player/${p.id}`)
+  closeMenu()
+}
+
+function onItemClick(p: PlayerDTO) {
+  addRecent(p)
+  closeMenu()
 }
 
 async function onEnter() {
@@ -261,7 +263,6 @@ async function onEnter() {
   )
   if (hasLocal) return
 
-  if (!enableRemoteSearch.value) return
   const remote = await searchPlayers(term)
   if (remote.length) {
     openMenu()
@@ -313,9 +314,10 @@ function getMembershipType(membershipType: number): string {
   }
 }
 
-const errorMessage = computed(() => {
-  if (!isError.value) return ''
-  return error.value?.message || 'An unknown error occurred.'
+watch(isError, (v, prev) => {
+  if (v && v !== prev) {
+    showGlobalError(error.value, 'An unknown error occurred.')
+  }
 })
 
 watch(
@@ -329,12 +331,6 @@ watch(playersData, (val) => {
   if (val) {
     allPlayers.value = val
     runFilter()
-  }
-})
-
-watch([isError, errorMessage], ([errState, msg], [prevErrState]) => {
-  if (errState && msg && (errState !== prevErrState || showErrorSnack.value === false)) {
-    showErrorSnack.value = true
   }
 })
 </script>

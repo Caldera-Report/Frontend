@@ -4,46 +4,30 @@
     <div class="heading-row">
       <div class="titles">
         <h1 class="main-title">{{ activityTitle || 'Activity Report' }}</h1>
-        <div class="sub-info" v-if="report">
-          <span v-if="env" class="id-chip">Instance: {{ instanceId }}</span>
-          <span v-if="durationDisplay"> Duration: {{ durationDisplay }}</span>
-          <span v-if="playerCount"> Players: {{ playerCount }}</span>
-          <span v-if="periodDisplay"> Started: {{ periodDisplay }}</span>
-        </div>
       </div>
     </div>
 
     <v-progress-linear v-if="isPending" indeterminate color="primary" height="4" class="mb-4" />
 
     <div v-if="!isPending && isError" class="error-block">
-      <p>Error loading activity: {{ errorMessage || error?.message }}</p>
+      <p>Error loading activity: {{ error?.message || 'Failed to load activity' }}</p>
     </div>
 
     <div v-else-if="!isPending && !report" class="empty-block">No report data available.</div>
 
     <div v-else class="content stack" v-show="!isPending">
-      <div class="activity-summary-grid">
-        <div class="summary-pill">
-          <div class="label">Total Score</div>
-          <div class="value">{{ totalScoreDisplay }}</div>
+      <section class="activity-stats-cluster" aria-labelledby="stats-heading">
+        <h2 id="stats-heading" class="visually-hidden">Activity Summary</h2>
+        <div class="stat-hero" aria-label="Total Score">
+          <div class="stat-hero-label">Total Score</div>
+          <div class="stat-hero-value">{{ totalScoreDisplay }}</div>
+          <div class="stat-hero-meta">
+            <span v-if="durationDisplay">Duration: {{ durationDisplay }}</span>
+            <span v-if="playerCount">Players: {{ playerCount }}</span>
+            <span v-if="report?.period">Date: {{ new Date(report.period).toLocaleString() }}</span>
+          </div>
         </div>
-        <div class="summary-pill">
-          <div class="label">Total Kills</div>
-          <div class="value">{{ totalKills }}</div>
-        </div>
-        <div class="summary-pill">
-          <div class="label">Total Assists</div>
-          <div class="value">{{ totalAssists }}</div>
-        </div>
-        <div class="summary-pill">
-          <div class="label">Total Deaths</div>
-          <div class="value">{{ totalDeaths }}</div>
-        </div>
-        <div class="summary-pill" v-if="precisionKills > 0">
-          <div class="label">Precision Kills</div>
-          <div class="value">{{ precisionKills }}</div>
-        </div>
-      </div>
+      </section>
 
       <v-card class="players-card ui-card" elevation="1">
         <v-table density="comfortable" class="stats-table table-shell">
@@ -104,14 +88,13 @@
         <pre class="raw-json">{{ JSON.stringify(report, null, 2) }}</pre>
       </details>
     </div>
-    <ErrorSnackbar v-model="showErrorSnack" :message="errorMessage" />
   </div>
 </template>
 <script setup lang="ts">
-import { computed, watch, watchEffect, ref } from 'vue'
+import { computed, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActivityReport, useDestinyActivity } from '@/hooks'
-import ErrorSnackbar from '@/components/ErrorSnackbar.vue'
+import { showGlobalError } from '@/hooks/useGlobalError'
 
 const props = defineProps<{ instanceId: string }>()
 
@@ -148,19 +131,15 @@ const isPending = computed(() => isReportPending.value || isDefPending.value)
 const isError = computed(() => isReportError.value || isDefError.value)
 const error = computed(() => reportError.value || defError.value)
 
-const showErrorSnack = ref(false)
-const errorMessage = ref('')
-
 watch([isError, error], ([errState, errObj], [prevErr]) => {
-  if (errState && errObj && (errState !== prevErr || showErrorSnack.value === false)) {
-    errorMessage.value = (errObj as Error).message || 'Failed to load activity'
-    showErrorSnack.value = true
+  if (errState && errObj && errState !== prevErr) {
+    showGlobalError(errObj, 'Failed to load activity')
   }
 })
 
 const activityTitle = computed(() => {
-  const defName = destinyActivity.value?.displayProperties?.name
-  return cleanName(defName) || optimisticName
+  const defName = cleanName(destinyActivity.value?.displayProperties?.name)
+  return defName || optimisticName
 })
 
 const pageTitle = computed(() => {
@@ -255,12 +234,6 @@ const playerStats = computed<PlayerStatRow[]>(() => {
     .sort((a, b) => b.score - a.score)
 })
 
-const totalKills = computed(() => playerStats.value.reduce((s, p) => s + p.kills, 0))
-const totalAssists = computed(() => playerStats.value.reduce((s, p) => s + p.assists, 0))
-const totalDeaths = computed(() => playerStats.value.reduce((s, p) => s + p.deaths, 0))
-const precisionKills = computed(() =>
-  playerStats.value.reduce((s, p) => s + (p.precisionKills || 0), 0),
-)
 const totalScore = computed(() => playerStats.value.reduce((s, p) => s + p.score, 0))
 const totalScoreDisplay = computed(() => formatNumber(totalScore.value))
 const durationSeconds = computed(() =>
@@ -268,15 +241,6 @@ const durationSeconds = computed(() =>
 )
 const durationDisplay = computed(() => timeDisplay(durationSeconds.value))
 const playerCount = computed(() => report.value?.entries?.length || 0)
-const periodDisplay = computed(() => {
-  if (!report.value?.period) return ''
-  try {
-    const d = new Date(report.value.period)
-    return d.toLocaleString()
-  } catch {
-    return ''
-  }
-})
 
 function goToPlayer(p: PlayerStatRow) {
   if (!p.membershipId || p.membershipType === undefined) return
@@ -289,30 +253,162 @@ function goToPlayer(p: PlayerStatRow) {
 </script>
 
 <style scoped>
-.activity-summary-grid {
+.activity-stats-cluster {
+  margin-bottom: var(--space-10);
   display: grid;
-  gap: var(--space-8);
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-10);
 }
-.summary-pill {
-  padding: var(--space-6) var(--space-7);
+.stat-hero {
+  background: var(--color-bg-alt);
+  border: 1px solid rgba(var(--color-accent-rgb) / 0.4);
+  padding: clamp(var(--space-4), 2vw, var(--space-7));
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.stat-hero-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-soft);
+}
+.stat-hero-value {
+  font-size: clamp(1.8rem, 4.5vw, 2.8rem);
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1;
+}
+.stat-hero-meta {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--color-text-soft);
+}
+.stat-grid {
+  --min-tile: 120px;
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fill, minmax(var(--min-tile), 1fr));
+}
+.stat {
   background: var(--color-bg-alt);
   border: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition);
 }
-.summary-pill .label {
-  font-size: var(--text-xs);
+.stat:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-strong);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.stat dt {
+  font-size: var(--text-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.75px;
+  letter-spacing: 0.7px;
   color: var(--color-text-soft);
 }
-.summary-pill .value {
+.stat dd {
+  margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.heading-row {
+  position: relative;
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+.players-card {
+  overflow: hidden;
+}
+:deep(.stats-table thead tr) {
+  background: linear-gradient(180deg, #101014, #0d0d10);
+}
+:deep(.stats-table thead th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #101014;
+  box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.4);
+}
+:deep(.stats-table tbody tr) {
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+:deep(.stats-table tbody tr:hover) {
+  background: var(--color-bg-hover) !important;
+}
+:deep(.stats-table tbody tr:hover td) {
+  color: var(--color-text);
+}
+:deep(.player-cell.clickable) {
+  cursor: pointer;
+  outline: none;
+}
+:deep(.player-cell.clickable:focus-visible) {
+  box-shadow: 0 0 0 2px var(--color-focus-ring) inset;
+}
+:deep(.player-cell.clickable:hover .sub),
+:deep(.player-cell.clickable:focus-visible .sub) {
+  color: var(--color-accent);
+}
+.raw-toggle {
+  font-size: var(--text-xs);
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+.raw-toggle[open] {
+  border-color: var(--color-accent);
+}
+.raw-toggle summary {
+  cursor: pointer;
+  color: var(--color-text-soft);
+  transition: color var(--transition);
+}
+.raw-toggle summary:hover {
+  color: var(--color-text);
+}
+.raw-json {
+  max-height: 320px;
+  overflow: auto;
+  margin-top: var(--space-6);
+  background: #0d0d10;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.3;
 }
 .player-id-block {
   display: flex;

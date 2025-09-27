@@ -1,3 +1,5 @@
+import { showGlobalError } from '@/hooks/useGlobalError'
+
 export interface RequestOptions extends RequestInit {
   json?: unknown
   retry?: number
@@ -39,7 +41,13 @@ export async function http<T = unknown>(url: string, opts: RequestOptions = {}):
 
   let attempt = 0
   for (;;) {
-    const res = await fetch(url, init)
+    let res: Response
+    try {
+      res = await fetch(url, init)
+    } catch (networkErr) {
+      showGlobalError(networkErr, 'Network error. Please check your connection.')
+      throw networkErr
+    }
     if (res.ok || res.status === 304) {
       if (res.status === 204) return undefined as T
       return (await res.json()) as T
@@ -50,6 +58,8 @@ export async function http<T = unknown>(url: string, opts: RequestOptions = {}):
       continue
     }
     const body = await parseBody(res)
-    throw new HttpError(res.status, url, `Request failed ${res.status}`, body)
+    const httpErr = new HttpError(res.status, url, `Request failed ${res.status}`, body)
+    showGlobalError(httpErr)
+    throw httpErr
   }
 }

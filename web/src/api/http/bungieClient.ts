@@ -1,4 +1,5 @@
 import type { HttpClient, HttpClientConfig } from 'bungie-api-ts/http'
+import { showGlobalError } from '@/hooks/useGlobalError'
 import {
   getDestinyManifest,
   getDestinyManifestComponent,
@@ -46,19 +47,26 @@ export const bungieHttp: HttpClient = async <T>(config: HttpClientConfig): Promi
       headers['X-API-Key'] = API_KEY
     }
     if (config.method === 'POST') headers['Content-Type'] = 'application/json'
-    const res = await fetch(url.toString(), {
-      method: config.method,
-      headers,
-      body:
-        config.method === 'POST' && config.body !== undefined
-          ? JSON.stringify(config.body)
-          : undefined,
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Bungie API ${res.status}: ${text}`)
+    try {
+      const res = await fetch(url.toString(), {
+        method: config.method,
+        headers,
+        body:
+          config.method === 'POST' && config.body !== undefined
+            ? JSON.stringify(config.body)
+            : undefined,
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        const err = new Error(`Bungie API ${res.status}: ${text}`)
+        showGlobalError(err)
+        throw err
+      }
+      return (await res.json()) as T
+    } catch (e) {
+      showGlobalError(e, 'Bungie API request failed.')
+      throw e
     }
-    return (await res.json()) as T
   })
 }
 

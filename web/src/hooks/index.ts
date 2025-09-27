@@ -60,10 +60,10 @@ export const useAllActivities = () => {
   })
 }
 
-export const usePlayer = (membershipId: string) => {
+export const usePlayer = (membershipId: string | Ref<string>) => {
   return useQuery<PlayerDTO>({
     queryKey: ['player', membershipId],
-    queryFn: () => getPlayer(membershipId),
+    queryFn: () => getPlayer(unref(membershipId)),
     staleTime: 60 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -151,11 +151,15 @@ export const useActivityReport = (instanceId: string) => {
   })
 }
 
-export const useClanForUser = (membershipId: string, membershipType: number | Ref<number>) => {
+export const useClanForUser = (
+  membershipId: string | Ref<string>,
+  membershipType: number | Ref<number>,
+) => {
   return useQuery<GetGroupsForMemberResponse>({
     queryKey: ['clanForUser', membershipId, unref(membershipType)],
-    queryFn: () => getClanForUser(membershipId, unref(membershipType)).then((r) => r.Response),
-    enabled: () => unref(membershipType) !== 0,
+    queryFn: () =>
+      getClanForUser(unref(membershipId), unref(membershipType)).then((r) => r.Response),
+    enabled: () => unref(membershipType) !== 0 && !!unref(membershipId),
     staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
