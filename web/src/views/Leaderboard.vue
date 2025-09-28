@@ -427,6 +427,9 @@ function setActivityToAll(isActive: boolean) {
   .leaderboard-controls .type-field {
     padding-top: 4px;
   }
+  .leaderboard-controls .activity-field {
+    flex: 0 0 auto;
+  }
 }
 .leaderboard-table-wrapper {
   overflow: auto;
