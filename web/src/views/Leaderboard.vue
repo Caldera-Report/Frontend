@@ -34,6 +34,7 @@
             placeholder="Filter / search activities..."
             hide-details
             clearable
+            v-on:update:focused="setActivityToAll"
           >
             <template #item="{ props: itemProps, index, item }">
               <template v-if="shouldShowSubheader(index, item.raw.group)">
@@ -237,6 +238,7 @@ const BATCH_SIZE = 75
 const visibleCount = ref(INITIAL_COUNT)
 
 const filteredRows = computed(() => {
+  if (!searchTerm.value) return rows.value
   const term = searchTerm.value.trim().toLowerCase()
   if (!term) return rows.value
   return rows.value.filter((r) => r.player.fullDisplayName.toLowerCase().includes(term))
@@ -257,6 +259,7 @@ function escapeHtml(s: string) {
 let hlTerm = ''
 let hlRe: RegExp | null = null
 function highlight(name: string) {
+  if (!searchTerm.value) return escapeHtml(name)
   const term = searchTerm.value.trim()
   if (!term) return escapeHtml(name)
   if (term !== hlTerm) {
@@ -310,6 +313,11 @@ function goToPlayer(player: PlayerDTO) {
     name: 'Player',
     params: { membershipId: player.id },
   })
+}
+
+function setActivityToAll(isActive: boolean) {
+  selectedActivityId.value =
+    !isActive && selectedActivityId.value == undefined ? '0' : selectedActivityId.value
 }
 </script>
 
