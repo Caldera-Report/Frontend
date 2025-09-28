@@ -82,4 +82,42 @@ import PlayerSearch from './PlayerSearch.vue'
     font-size: 1.1rem;
   }
 }
+@media (max-width: 640px) {
+  .site-header__inner {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: var(--space-4) var(--space-5);
+    gap: var(--space-4);
+  }
+  .site-header__brand {
+    position: static;
+    transform: none;
+    justify-content: center;
+    margin: 0 auto;
+  }
+  .site-header__logo {
+    height: 42px;
+  }
+  .site-header__search {
+    max-width: 100%;
+    width: 100%;
+    order: 3;
+  }
+  .site-header__nav {
+    position: static;
+    transform: none;
+    order: 2;
+    align-self: flex-end;
+  }
+}
+@media (max-width: 400px) {
+  .site-header__name {
+    display: none;
+  }
+  .site-header__logo {
+    height: 40px;
+  }
+}
 </style>
