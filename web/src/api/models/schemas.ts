@@ -39,6 +39,13 @@ export interface PlayerDTO {
   fullDisplayName: string
 }
 
+export interface PlayerSearchDTO {
+  id: string
+  membershipType: number
+  lastPlayedCharacterEmblemPath?: string | null
+  fullDisplayName: string
+}
+
 export interface ActivityLoadResponse {
   success: boolean
 }

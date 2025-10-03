@@ -76,15 +76,15 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { type PlayerDTO } from '@/api/models'
+import { type PlayerDTO, type PlayerSearchDTO } from '@/api/models'
 import { usePlayers, useSearchPlayer } from '@/hooks'
 import { showGlobalError } from '@/hooks/useGlobalError'
 
 const router = useRouter()
 
 const search = ref('')
-const selectedPlayer = ref<PlayerDTO | null>(null)
-const allPlayers = ref<PlayerDTO[]>([])
+const selectedPlayer = ref<PlayerSearchDTO | null>(null)
+const allPlayers = ref<PlayerSearchDTO[]>([])
 
 const menu = ref(false)
 const activeIndex = ref(-1)
@@ -95,9 +95,9 @@ const dropdownWidth = ref('360px')
 const ENABLE_RECENTS = true
 const RECENT_LIMIT = 8
 const RECENTS_KEY = 'recentPlayers'
-const recentPlayers = ref<PlayerDTO[]>([])
+const recentPlayers = ref<PlayerSearchDTO[]>([])
 
-const filtered = ref<PlayerDTO[]>([])
+const filtered = ref<PlayerSearchDTO[]>([])
 
 const {
   data: playersData,
@@ -109,7 +109,7 @@ const {
 const searchMutation = useSearchPlayer()
 
 const searchPlayers = async (term: string) => {
-  if (!searchMutation) return [] as PlayerDTO[]
+  if (!searchMutation) return [] as PlayerSearchDTO[]
   return await searchMutation.mutateAsync(term)
 }
 
@@ -166,7 +166,7 @@ function resetActive() {
   activeIndex.value = -1
 }
 
-function textMatch(item: PlayerDTO) {
+function textMatch(item: PlayerSearchDTO) {
   const term = search.value.trim().toLowerCase()
   if (!term) return false
   const itemText = item.fullDisplayName.toLowerCase()
@@ -235,15 +235,15 @@ function move(delta: number) {
   activeIndex.value = filtered.value.findIndex((i) => i.id === targetId)
 }
 
-function selectPlayer(p: PlayerDTO) {
+function selectPlayer(p: PlayerSearchDTO) {
   selectedPlayer.value = p
   addRecent(p)
-  search.value = p.fullDisplayName || p.displayName
+  search.value = p.fullDisplayName
   router.push(`/player/${p.id}`)
   closeMenu()
 }
 
-function onItemClick(p: PlayerDTO) {
+function onItemClick(p: PlayerSearchDTO) {
   addRecent(p)
   closeMenu()
 }
@@ -288,7 +288,7 @@ function loadRecents() {
 function saveRecents() {
   localStorage.setItem(RECENTS_KEY, JSON.stringify(recentPlayers.value))
 }
-function addRecent(p: PlayerDTO) {
+function addRecent(p: PlayerSearchDTO) {
   if (!ENABLE_RECENTS) return
   recentPlayers.value = [p, ...recentPlayers.value.filter((r) => r.id !== p.id)].slice(
     0,

@@ -5,15 +5,16 @@ import {
   type CompletionsLeaderBoardResponse,
   type OpTypeDTO,
   type PlayerDTO,
+  type PlayerSearchDTO,
   type TimeLeaderBoardResponse,
 } from '../models/schemas'
 
-export async function fetchPlayers(): Promise<PlayerDTO[]> {
-  return calderaGet<PlayerDTO[]>('/players')
+export async function fetchPlayers(): Promise<PlayerSearchDTO[]> {
+  return calderaGet<PlayerSearchDTO[]>('/players')
 }
 
-export async function searchForPlayer(playerName: string): Promise<PlayerDTO[]> {
-  return calderaPost<PlayerDTO[]>('/players/search', { playerName })
+export async function searchForPlayer(playerName: string): Promise<PlayerSearchDTO[]> {
+  return calderaPost<PlayerSearchDTO[]>('/players/search', { playerName })
 }
 
 export async function getActivities(): Promise<OpTypeDTO[]> {

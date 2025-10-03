@@ -10,7 +10,7 @@ import {
   getTotalTimeLeaderboard,
 } from '@/api/api/caldera-report-api'
 import { getPGCR, getActivitiesBungie, getClanForUser } from '@/api/http/bungieClient'
-import type { ActivityReportListDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
+import type { ActivityReportListDTO, OpTypeDTO, PlayerDTO, PlayerSearchDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import {
   type DestinyActivityDefinition,
@@ -20,7 +20,7 @@ import type { GetGroupsForMemberResponse } from 'bungie-api-ts/groupv2'
 import { unref, type Ref } from 'vue'
 
 export const usePlayers = () => {
-  return useQuery<PlayerDTO[]>({
+  return useQuery<PlayerSearchDTO[]>({
     queryKey: ['players'],
     queryFn: fetchPlayers,
     staleTime: 60 * 60_000,
@@ -34,7 +34,7 @@ export const useSearchPlayer = () => {
   return useMutation({
     mutationFn: searchForPlayer,
     onSuccess: (data) => {
-      queryClient.setQueryData<PlayerDTO[]>(['players'], (old = []) => {
+      queryClient.setQueryData<PlayerSearchDTO[]>(['players'], (old = []) => {
         if (!data.length) return old
         const existing = new Set(old.map((p) => p.id))
         const merged = [...old]
