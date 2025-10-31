@@ -51,7 +51,7 @@
               ref="activityCards"
               v-for="activity in sortedActivities(opType)"
               :key="activity.id"
-              :image-url="'https://www.bungie.net' + activity.imageURL"
+              :image-url="activity.imageURL"
               :activity-name="activity.name"
               :activity-id="activity.id"
               :player-id="player.id"
