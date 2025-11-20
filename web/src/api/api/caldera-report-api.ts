@@ -2,16 +2,11 @@ import { calderaGet, calderaPost } from '../http/calderaClient'
 import {
   type ActivityLoadResponse,
   type ActivityReportListDTO,
-  type CompletionsLeaderBoardResponse,
+  type LeaderboardResponse,
   type OpTypeDTO,
   type PlayerDTO,
   type PlayerSearchDTO,
-  type TimeLeaderBoardResponse,
 } from '../models/schemas'
-
-export async function fetchPlayers(): Promise<PlayerSearchDTO[]> {
-  return calderaGet<PlayerSearchDTO[]>('/players')
-}
 
 export async function searchForPlayer(playerName: string): Promise<PlayerSearchDTO[]> {
   return calderaPost<PlayerSearchDTO[]>('/players/search', { playerName })
@@ -36,22 +31,29 @@ export async function updatePlayerActivityReports(playerId: string): Promise<Act
   return calderaPost<ActivityLoadResponse>(`/players/${playerId}/load`, {})
 }
 
-export async function getCompletionsLeaderboard(
+export async function getLeaderboard(
   activityId: string,
-): Promise<CompletionsLeaderBoardResponse[]> {
-  return calderaGet<CompletionsLeaderBoardResponse[]>(
-    `/activities/leaderboards/completions/${activityId}`,
+  type: string,
+  count?: number,
+  offset?: number,
+): Promise<LeaderboardResponse[]> {
+  const params = new URLSearchParams()
+  if (typeof count === 'number') params.set('count', count.toString())
+  if (typeof offset === 'number') params.set('offset', offset.toString())
+
+  const query = params.toString()
+  const suffix = query ? `?${query}` : ''
+
+  return calderaGet<LeaderboardResponse[]>(`/activities/leaderboards/${type}/${activityId}${suffix}`)
+}
+
+export async function searchLeaderboard(
+  activityId: string,
+  type: string,
+  playerName: string,
+): Promise<LeaderboardResponse[]> {
+  return calderaPost<LeaderboardResponse[]>(
+    `/activities/leaderboards/${type}/${activityId}/search`,
+    { playerName },
   )
-}
-
-export async function getBestTimesLeaderboard(
-  activityId: string,
-): Promise<TimeLeaderBoardResponse[]> {
-  return calderaGet<TimeLeaderBoardResponse[]>(`/activities/leaderboards/speed/${activityId}`)
-}
-
-export async function getTotalTimeLeaderboard(
-  activityId: string,
-): Promise<TimeLeaderBoardResponse[]> {
-  return calderaGet<TimeLeaderBoardResponse[]>(`/activities/leaderboards/totalTime/${activityId}`)
 }

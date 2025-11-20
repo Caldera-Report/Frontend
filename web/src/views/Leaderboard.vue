@@ -62,18 +62,18 @@
               <span class="btn-text">Completions</span>
             </v-btn>
             <v-btn
-              value="besttimes"
-              :aria-pressed="selectedType === 'besttimes'"
+              value="speed"
+              :aria-pressed="selectedType === 'speed'"
               prepend-icon="mdi-timer-outline"
             >
               <span class="btn-text">Best</span>
             </v-btn>
             <v-btn
-              value="totaltime"
-              :aria-pressed="selectedType === 'totaltime'"
+              value="score"
+              :aria-pressed="selectedType === 'score'"
               prepend-icon="mdi-timer-sand-complete"
             >
-              <span class="btn-text">Total</span>
+              <span class="btn-text">Score</span>
             </v-btn>
           </v-btn-toggle>
         </div>
@@ -86,7 +86,12 @@
       {{ (error && (error as Error).message) || 'Failed to load leaderboard' }}
     </v-alert>
 
-    <div v-if="rows.length" class="leaderboard-table-wrapper" ref="tableWrapper" @scroll="onScroll">
+    <div
+      v-if="displayedRows.length"
+      class="leaderboard-table-wrapper"
+      ref="tableWrapper"
+      @scroll="onScroll"
+    >
       <table class="table-shell">
         <thead>
           <tr>
@@ -109,7 +114,7 @@
                 : undefined
             "
           >
-            <td class="rank-col">{{ rankLookup.get(row.player.id) ?? '' }}</td>
+            <td class="rank-col">{{ row.rank ?? '' }}</td>
             <td
               class="player-col player-cell"
               role="button"
@@ -125,9 +130,7 @@
                 </div>
               </div>
             </td>
-            <td v-if="isCompletionsRow(row)" class="stat-col">{{ row.completions }}</td>
-            <td v-else-if="isTimeRow(row)" class="stat-col monospace">{{ row.time }}</td>
-            <td v-else class="stat-col">—</td>
+            <td class="stat-col">{{ row.data }}</td>
           </tr>
         </tbody>
       </table>
@@ -141,13 +144,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAllActivities, useLeaderboard } from '@/hooks'
-import type {
-  TimeLeaderBoardResponse,
-  CompletionsLeaderBoardResponse,
-  PlayerDTO,
-} from '@/api/models'
+import { useAllActivities, useLeaderboard, useSearchLeaderboard } from '@/hooks'
+import type { LeaderboardResponse, PlayerDTO } from '@/api/models'
 import { showGlobalError } from '@/hooks/useGlobalError'
+import { debounce } from 'vuetify/lib/util/helpers.mjs'
 
 defineOptions({ name: 'LeaderboardsView' })
 const props = defineProps<{ type?: string; activityId?: string }>()
@@ -157,17 +157,14 @@ const router = useRouter()
 
 const leaderboardTypeItems = [
   { label: 'Completions', value: 'completions' },
-  { label: 'Best Times', value: 'besttimes' },
-  { label: 'Total Time', value: 'totaltime' },
+  { label: 'Best Times', value: 'speed' },
+  { label: 'Score', value: 'score' },
 ]
 
-const selectedType = ref<'completions' | 'besttimes' | 'totaltime'>(
-  (props.type as string) && ['completions', 'besttimes', 'totaltime'].includes(props.type!)
-    ? (props.type as 'completions' | 'besttimes' | 'totaltime')
+const selectedType = ref<'completions' | 'speed' | 'score'>(
+  (props.type as string) && ['completions', 'speed', 'score'].includes(props.type!)
+    ? (props.type as 'completions' | 'speed' | 'score')
     : 'completions',
-)
-const selectedActivityId = ref<string>(
-  props.activityId ?? (route.params.activityId as string) ?? '0',
 )
 
 const {
@@ -186,7 +183,7 @@ interface ActivityItem {
 }
 
 const activityItems = computed<ActivityItem[]>(() => {
-  const items: ActivityItem[] = [{ label: 'All', value: '0', group: 'All' }]
+  const items: ActivityItem[] = []
   if (!opTypes.value) return items
   for (const opType of opTypes.value) {
     if (!opType.activities || !opType.activities.length) continue
@@ -197,19 +194,72 @@ const activityItems = computed<ActivityItem[]>(() => {
   return items
 })
 
+const DEFAULT_ACTIVITY_ID = '2489241976'
+function normalizeActivityId(id?: string | string[] | null) {
+  if (Array.isArray(id)) {
+    return normalizeActivityId(id[0])
+  }
+  if (!id || id === '0') return DEFAULT_ACTIVITY_ID
+  return id
+}
+function resolveRouteActivityParam(param: unknown): string | undefined {
+  if (Array.isArray(param)) return param[0]
+  return param as string | undefined
+}
+
+const selectedActivityId = ref<string>(
+  normalizeActivityId(props.activityId ?? resolveRouteActivityParam(route.params.activityId)),
+)
+
+watch(
+  () => [props.activityId, route.params.activityId],
+  ([propActivityId, routeActivityParam]) => {
+    const sanitized = normalizeActivityId(
+      propActivityId ?? resolveRouteActivityParam(routeActivityParam),
+    )
+    if (selectedActivityId.value !== sanitized) {
+      selectedActivityId.value = sanitized
+    }
+  },
+  { immediate: true },
+)
+
 function shouldShowSubheader(index: number, group: string) {
-  if (group === 'All') return index === 0
   if (index === 0) return true
   const prev = activityItems.value[index - 1]
   return !prev || prev.group !== group
 }
 
-const leaderboardQuery = useLeaderboard(selectedType, selectedActivityId)
+const PAGE_SIZE = 250
+const count = ref(PAGE_SIZE)
+const offset = ref(0)
+const hasMore = ref(true)
+
+const leaderboardQuery = useLeaderboard(selectedType, selectedActivityId, count, offset)
 const activeQuery = computed(() => leaderboardQuery)
 
-const isPending = computed(() => leaderboardQuery.isPending.value || activitiesPending.value)
-const isError = computed(() => leaderboardQuery.isError.value || activitiesError.value || false)
-const error = computed(() => leaderboardQuery.error.value || activitiesErrObj.value || null)
+const searchMutation = useSearchLeaderboard()
+
+const searchTerm = ref('')
+const searchResults = ref<LeaderboardRow[] | null>(null)
+const isSearchMode = computed(() => !!(searchTerm.value ?? '').trim())
+
+const isPending = computed(
+  () =>
+    activitiesPending.value ||
+    (isSearchMode.value ? searchMutation.isPending.value : leaderboardQuery.isPending.value),
+)
+const isFetching = computed(() => leaderboardQuery.isFetching.value)
+const isError = computed(() =>
+  isSearchMode.value
+    ? searchMutation.isError.value || activitiesError.value || false
+    : leaderboardQuery.isError.value || activitiesError.value || false,
+)
+const error = computed(() =>
+  isSearchMode.value
+    ? searchMutation.error.value || activitiesErrObj.value || null
+    : leaderboardQuery.error.value || activitiesErrObj.value || null,
+)
 
 watch([isError, error], ([errState, errObj], [prevErrState]) => {
   if (errState && errObj && errState !== prevErrState) {
@@ -217,37 +267,53 @@ watch([isError, error], ([errState, errObj], [prevErrState]) => {
   }
 })
 
-type LeaderboardRow = (CompletionsLeaderBoardResponse | TimeLeaderBoardResponse) & {
+type LeaderboardRow = LeaderboardResponse & {
   player: PlayerDTO
 }
-const rows = computed<LeaderboardRow[]>(() => {
-  const data = activeQuery.value.data.value
-  if (!data) return []
-  return data as LeaderboardRow[]
+
+const loadedRows = ref<LeaderboardRow[]>([])
+
+watch(
+  () => activeQuery.value.data.value,
+  (data) => {
+    if (!data) return
+    if (offset.value === 0) {
+      loadedRows.value = data as LeaderboardRow[]
+    } else {
+      loadedRows.value = [...loadedRows.value, ...(data as LeaderboardRow[])]
+    }
+    hasMore.value = (data as LeaderboardRow[]).length >= count.value
+  },
+  { immediate: true },
+)
+
+const rows = computed<LeaderboardRow[]>(() => loadedRows.value)
+
+const displayedRows = computed(() => {
+  if (isSearchMode.value) return searchResults.value ?? []
+  return rows.value
 })
 
-const rankLookup = computed(() => {
-  const map = new Map<string, number>()
-  rows.value.forEach((r, i) => map.set(r.player.id, i + 1))
-  return map
-})
+const triggerSearch = debounce(async () => {
+  if (!searchTerm.value) {
+    searchResults.value = null
+    return
+  }
+  const term = searchTerm.value.trim()
+  if (!term) {
+    searchResults.value = null
+    return
+  }
+  const data = await searchMutation.mutateAsync({
+    type: selectedType.value,
+    activityId: selectedActivityId.value,
+    playerName: term,
+  })
+  searchResults.value = data as LeaderboardRow[]
+}, 500)
 
-const searchTerm = ref('')
-const INITIAL_COUNT = 100
-const BATCH_SIZE = 75
-const visibleCount = ref(INITIAL_COUNT)
-
-const filteredRows = computed(() => {
-  if (!searchTerm.value) return rows.value
-  const term = searchTerm.value.trim().toLowerCase()
-  if (!term) return rows.value
-  return rows.value.filter((r) => r.player.fullDisplayName.toLowerCase().includes(term))
-})
-
-const displayedRows = computed(() => filteredRows.value.slice(0, visibleCount.value))
-
-watch([rows, searchTerm], () => {
-  visibleCount.value = INITIAL_COUNT
+watch([searchTerm, selectedType, selectedActivityId], () => {
+  triggerSearch()
 })
 
 function escapeHtml(s: string) {
@@ -270,42 +336,44 @@ function highlight(name: string) {
   return escapeHtml(name).replace(hlRe!, '<mark>$1</mark>')
 }
 
-function maybeGrowVisible() {
-  if (visibleCount.value >= rows.value.length) return
-  visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, rows.value.length)
-}
-
 const tableWrapper = ref<HTMLElement | null>(null)
 function onScroll() {
   const el = tableWrapper.value
   if (!el) return
   const threshold = 200
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
-    maybeGrowVisible()
+    maybeLoadMore()
   }
 }
 
-function isCompletionsRow(
-  r: LeaderboardRow,
-): r is CompletionsLeaderBoardResponse & { player: PlayerDTO } {
-  return 'completions' in r
-}
-function isTimeRow(r: LeaderboardRow): r is TimeLeaderBoardResponse & { player: PlayerDTO } {
-  return 'time' in r
+function maybeLoadMore() {
+  if (isSearchMode.value) return
+  if (!hasMore.value) return
+  if (isFetching.value) return
+  offset.value += count.value
 }
 
 const pageTitle = computed(() => {
   const label = leaderboardTypeItems.find((t) => t.value === selectedType.value)?.label
   const actLabel = activityItems.value.find((a) => a.value === selectedActivityId.value)?.label
-  if (selectedType.value === 'totaltime') return `${label} Leaderboard - Caldera Report`
+  if (selectedType.value === 'score') return `${label} Leaderboard - Caldera Report`
   return `${label} - ${actLabel} - Caldera Report`
 })
 
-watch([selectedType, selectedActivityId], ([type, act]) => {
-  if (route.params.type !== type || route.params.activityId !== act) {
-    router.replace({ name: 'Leaderboard', params: { type, activityId: act } })
-  }
-})
+watch(
+  [selectedType, selectedActivityId],
+  ([type, act]) => {
+    const routeActivityId = resolveRouteActivityParam(route.params.activityId)
+    if (route.params.type !== type || routeActivityId !== act) {
+      router.replace({ name: 'Leaderboard', params: { type, activityId: act } })
+    }
+    offset.value = 0
+    hasMore.value = true
+    loadedRows.value = []
+    if (tableWrapper.value) tableWrapper.value.scrollTop = 0
+  },
+  { immediate: true },
+)
 
 function goToPlayer(player: PlayerDTO) {
   if (!player?.id || player.membershipType === undefined) return
@@ -315,9 +383,22 @@ function goToPlayer(player: PlayerDTO) {
   })
 }
 
+function fallbackActivityId() {
+  return (
+    activityItems.value.find((item) => item.value === DEFAULT_ACTIVITY_ID)?.value ??
+    activityItems.value[0]?.value ??
+    DEFAULT_ACTIVITY_ID
+  )
+}
+
 function setActivityToAll(isActive: boolean) {
-  selectedActivityId.value =
-    !isActive && selectedActivityId.value == undefined ? '0' : selectedActivityId.value
+  const needsReset =
+    selectedActivityId.value === undefined ||
+    selectedActivityId.value === null ||
+    selectedActivityId.value === ''
+  if (!isActive && needsReset) {
+    selectedActivityId.value = fallbackActivityId()
+  }
 }
 </script>
 

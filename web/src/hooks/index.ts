@@ -1,16 +1,14 @@
 import {
-  fetchPlayers,
   getActivities,
   getPlayer,
   getPlayerReportsForActivity,
   updatePlayerActivityReports,
   searchForPlayer,
-  getCompletionsLeaderboard,
-  getBestTimesLeaderboard,
-  getTotalTimeLeaderboard,
+  getLeaderboard,
+  searchLeaderboard,
 } from '@/api/api/caldera-report-api'
 import { getPGCR, getActivitiesBungie, getClanForUser } from '@/api/http/bungieClient'
-import type { ActivityReportListDTO, OpTypeDTO, PlayerDTO, PlayerSearchDTO } from '@/api/models'
+import type { ActivityReportListDTO, OpTypeDTO, PlayerDTO } from '@/api/models'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import {
   type DestinyActivityDefinition,
@@ -19,33 +17,17 @@ import {
 import type { GetGroupsForMemberResponse } from 'bungie-api-ts/groupv2'
 import { unref, type Ref } from 'vue'
 
-export const usePlayers = () => {
-  return useQuery<PlayerSearchDTO[]>({
-    queryKey: ['players'],
-    queryFn: fetchPlayers,
-    staleTime: 60 * 60_000,
-    refetchOnWindowFocus: false,
-    retry: false,
+export const useSearchPlayer = () => {
+  return useMutation({
+    mutationFn: searchForPlayer,
+    retry: 1,
   })
 }
 
-export const useSearchPlayer = () => {
-  const queryClient = useQueryClient()
+export const useSearchLeaderboard = () => {
   return useMutation({
-    mutationFn: searchForPlayer,
-    onSuccess: (data) => {
-      queryClient.setQueryData<PlayerSearchDTO[]>(['players'], (old = []) => {
-        if (!data.length) return old
-        const existing = new Set(old.map((p) => p.id))
-        const merged = [...old]
-        for (const p of data) {
-          if (!existing.has(p.id)) {
-            merged.push(p)
-          }
-        }
-        return merged
-      })
-    },
+    mutationFn: (payload: { type: LeaderboardType; activityId: string; playerName: string }) =>
+      searchLeaderboard(payload.activityId, payload.type, payload.playerName),
     retry: 1,
   })
 }
@@ -96,48 +78,6 @@ export const useUpdatePlayerActivityReports = () => {
   })
 }
 
-export const useCompletionsLeaderboard = (activityId: string | Ref<string>) => {
-  return useQuery<{ player: PlayerDTO; completions: number }[]>({
-    queryKey: ['completionsLeaderboard', activityId],
-    queryFn: () => getCompletionsLeaderboard(unref(activityId)),
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-    retry: 1,
-    enabled: () => {
-      const id = unref(activityId) as string | undefined | null
-      return id !== undefined && id !== null && id !== ''
-    },
-  })
-}
-
-export const useBestTimesLeaderboard = (activityId: string | Ref<string>) => {
-  return useQuery<{ player: PlayerDTO; time: string }[]>({
-    queryKey: ['bestTimesLeaderboard', activityId],
-    queryFn: () => getBestTimesLeaderboard(unref(activityId)),
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-    retry: 1,
-    enabled: () => {
-      const id = unref(activityId) as string | undefined | null
-      return id !== undefined && id !== null && id !== ''
-    },
-  })
-}
-
-export const useTotalTimeLeaderboard = (activityId: string | Ref<string>) => {
-  return useQuery<{ player: PlayerDTO; time: string }[]>({
-    queryKey: ['totalTimeLeaderboard', activityId],
-    queryFn: () => getTotalTimeLeaderboard(unref(activityId)),
-    staleTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-    retry: 1,
-    enabled: () => {
-      const id = unref(activityId) as string | undefined | null
-      return id !== undefined && id !== null && id !== ''
-    },
-  })
-}
-
 export const useActivityReport = (instanceId: string) => {
   return useQuery<DestinyPostGameCarnageReportData>({
     queryKey: ['activityReport', instanceId],
@@ -183,33 +123,29 @@ export const useDestinyActivity = (activityId: number | Ref<number>) => {
   })
 }
 
-export type LeaderboardType = 'completions' | 'besttimes' | 'totaltime'
+export type LeaderboardType = 'completions' | 'speed' | 'score'
 export interface BaseLeaderboardEntry {
   player: PlayerDTO
 }
-export interface CompletionsEntry extends BaseLeaderboardEntry {
-  completions: number
-}
-export interface TimeEntry extends BaseLeaderboardEntry {
-  time: string
-}
-export type UnifiedLeaderboardRow = CompletionsEntry | TimeEntry
 
-export const useLeaderboard = (typeRef: Ref<LeaderboardType>, activityId: string | Ref<string>) => {
-  return useQuery<UnifiedLeaderboardRow[]>({
-    queryKey: ['leaderboard', typeRef, activityId],
+export const useLeaderboard = (
+  typeRef: Ref<LeaderboardType>,
+  activityId: string | Ref<string>,
+  count: number | Ref<number>,
+  offset: number | Ref<number>,
+) => {
+  return useQuery<{ player: PlayerDTO; data: string; rank: number }[]>({
+    queryKey: ['leaderboard', typeRef, activityId, count, offset],
     queryFn: async () => {
       const t = unref(typeRef)
       const id = unref(activityId)
       if (id === undefined || id === null || id === '') return []
-      switch (t) {
-        case 'completions':
-          return (await getCompletionsLeaderboard(id)) as CompletionsEntry[]
-        case 'besttimes':
-          return (await getBestTimesLeaderboard(id)) as TimeEntry[]
-        case 'totaltime':
-          return (await getTotalTimeLeaderboard(id)) as TimeEntry[]
-      }
+      const data = await getLeaderboard(id, t, unref(count), unref(offset))
+      return data.map((entry) => ({
+        player: entry.player,
+        data: entry.data,
+        rank: entry.rank,
+      }))
     },
     enabled: () => {
       const id = unref(activityId)

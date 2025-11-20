@@ -28,7 +28,7 @@
       <div v-if="menu" class="search-dropdown" :style="{ width: dropdownWidth }">
         <v-card elevation="4">
           <v-list
-            v-if="filtered.length || (recentPlayers.length && !search)"
+            v-if="allPlayers.length || (recentPlayers.length && !search)"
             density="comfortable"
             class="py-0"
             :max-height="360"
@@ -40,7 +40,7 @@
             <v-list-subheader v-else class="text-caption text-disabled">
               Search Results
             </v-list-subheader>
-            <template v-for="(p, i) in showRecents ? recentPlayers : filtered" :key="p.id">
+            <template v-for="(p, i) in showRecents ? recentPlayers : allPlayers" :key="p.id">
               <v-list-item
                 :value="p.id"
                 :active="i === activeIndex"
@@ -59,7 +59,7 @@
             </template>
           </v-list>
           <v-card-text
-            v-else-if="!filtered.length && !recentPlayers.length && !search.length"
+            v-else-if="!allPlayers.length && !recentPlayers.length && !search.length"
             class="text-center text-caption text-disabled py-4 px-6"
           >
             Start typing to search for players...
@@ -77,8 +77,9 @@
 import { ref, onMounted, watch, nextTick, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { type PlayerDTO, type PlayerSearchDTO } from '@/api/models'
-import { usePlayers, useSearchPlayer } from '@/hooks'
+import { useSearchPlayer } from '@/hooks'
 import { showGlobalError } from '@/hooks/useGlobalError'
+import { debounce } from 'vuetify/lib/util/helpers.mjs'
 
 const router = useRouter()
 
@@ -97,34 +98,24 @@ const RECENT_LIMIT = 8
 const RECENTS_KEY = 'recentPlayers'
 const recentPlayers = ref<PlayerSearchDTO[]>([])
 
-const filtered = ref<PlayerSearchDTO[]>([])
-
-const {
-  data: playersData,
-  isPending: isPlayersPending,
-  isError: isPlayersError,
-  error: playersError,
-} = usePlayers()
+const playersData = ref<PlayerSearchDTO[] | null>(null)
 
 const searchMutation = useSearchPlayer()
 
 const searchPlayers = async (term: string) => {
-  if (!searchMutation) return [] as PlayerSearchDTO[]
-  return await searchMutation.mutateAsync(term)
+  if (!searchMutation) return
+  playersData.value = await searchMutation.mutateAsync(term.trim())
 }
 
-const isSearchPending = computed(() => (searchMutation ? searchMutation.isPending.value : false))
-const isSearchError = computed(() => (searchMutation ? searchMutation.isError.value : false))
-const searchError = computed(() => (searchMutation ? searchMutation.error.value : null))
-
-const isPending = computed(() => isPlayersPending.value || isSearchPending.value)
-const isError = computed(() => isPlayersError.value || isSearchError.value)
-const error = computed(() => playersError.value || searchError.value)
+const isPending = computed(() => (searchMutation ? searchMutation.isPending.value : false))
+const isError = computed(() => (searchMutation ? searchMutation.isError.value : false))
+const error = computed(() => (searchMutation ? searchMutation.error.value : null))
 
 watch(playersData, (val) => {
   if (val) {
     allPlayers.value = val
-    runFilter()
+  } else {
+    alert(`No players found for "${search.value}".`)
   }
 })
 
@@ -132,7 +123,6 @@ onMounted(() => {
   if (ENABLE_RECENTS) loadRecents()
   if (playersData.value && !allPlayers.value.length) {
     allPlayers.value = playersData.value
-    runFilter()
   }
   document.addEventListener('pointerdown', onOutsidePointer, true)
 })
@@ -157,6 +147,7 @@ function openMenu() {
     resetActive()
   })
 }
+
 function closeMenu() {
   menu.value = false
   activeIndex.value = -1
@@ -166,24 +157,16 @@ function resetActive() {
   activeIndex.value = -1
 }
 
-function textMatch(item: PlayerSearchDTO) {
-  const term = search.value.trim().toLowerCase()
-  if (!term) return false
-  const itemText = item.fullDisplayName.toLowerCase()
-  return itemText.indexOf(term) !== -1
-}
-
-function runFilter() {
-  filtered.value = allPlayers.value.filter(textMatch).slice(0, 25)
-}
-
-watch(search, () => {
-  requestAnimationFrame(() => {
-    runFilter()
-    if (search.value && !menu.value) openMenu()
-    resetActive()
-  })
-})
+watch(
+  search,
+  debounce(() => {
+    requestAnimationFrame(() => {
+      if (search.value.trim()) searchPlayers(search.value)
+      if (search.value && !menu.value) openMenu()
+      resetActive()
+    })
+  }, 500),
+)
 
 const showRecents = computed<boolean>(() => {
   const term = search.value.trim()
@@ -223,7 +206,7 @@ function highlight(name: string) {
 
 function move(delta: number) {
   if (!menu.value) openMenu()
-  const items = filtered.value
+  const items = allPlayers.value
   if (!items.length) {
     activeIndex.value = -1
     return
@@ -232,7 +215,7 @@ function move(delta: number) {
   if (idx < 0) idx = 0
   else idx = (idx + delta + items.length) % items.length
   const targetId = items[idx].id
-  activeIndex.value = filtered.value.findIndex((i) => i.id === targetId)
+  activeIndex.value = allPlayers.value.findIndex((i) => i.id === targetId)
 }
 
 function selectPlayer(p: PlayerSearchDTO) {
@@ -250,7 +233,7 @@ function onItemClick(p: PlayerSearchDTO) {
 
 async function onEnter() {
   if (activeIndex.value >= 0) {
-    const cand = filtered.value[activeIndex.value]
+    const cand = allPlayers.value[activeIndex.value]
     if (cand) {
       selectPlayer(cand)
       return
@@ -263,12 +246,7 @@ async function onEnter() {
   )
   if (hasLocal) return
 
-  const remote = await searchPlayers(term)
-  if (remote.length) {
-    openMenu()
-  } else {
-    alert(`No players found for "${term}".`)
-  }
+  await searchPlayers(term)
 }
 
 function clearSearch() {
@@ -320,19 +298,6 @@ watch(isError, (v, prev) => {
   }
 })
 
-watch(
-  () => allPlayers.value.length,
-  () => {
-    runFilter()
-  },
-)
-
-watch(playersData, (val) => {
-  if (val) {
-    allPlayers.value = val
-    runFilter()
-  }
-})
 </script>
 
 <style scoped>

@@ -50,12 +50,8 @@ export interface ActivityLoadResponse {
   success: boolean
 }
 
-export interface CompletionsLeaderBoardResponse {
+export interface LeaderboardResponse {
   player: PlayerDTO
-  completions: number
-}
-
-export interface TimeLeaderBoardResponse {
-  player: PlayerDTO
-  time: string
+  rank: number
+  data: string
 }
