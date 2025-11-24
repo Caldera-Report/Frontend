@@ -57,24 +57,49 @@
           <div class="skeleton-bar" v-for="n in 5" :key="n" />
           <span class="skeleton-label">Rendering graph…</span>
         </div>
-        <div
-          class="graph"
-          ref="graphEl"
-          :style="{
-            width: displayGraphWidth + 'px',
-            height: graphHeight + 'px',
-          }"
+        <svg
+          v-else
+          class="graph-svg"
+          :width="displayGraphWidth"
+          :height="graphHeight"
+          role="img"
+          aria-label="Activity duration trend graph"
+          @mousemove="handleSvgPointerMove"
+          @mouseleave="handleSvgPointerLeave"
+          @click="handleSvgClick"
+          ref="svgEl"
         >
-          <div class="graph__avg-line"></div>
-          <canvas
-            ref="canvasEl"
-            class="graph-canvas"
-            :class="{ 'is-hovering': !!hoverState }"
-            :width="canvasPixelWidth"
-            :height="canvasPixelHeight"
-            :style="{ width: displayGraphWidth + 'px', height: graphHeight + 'px' }"
-          ></canvas>
-        </div>
+          <line
+            class="graph__avg-line-svg"
+            x1="0"
+            :y1="graphHeight / 2"
+            :x2="displayGraphWidth"
+            :y2="graphHeight / 2"
+          />
+          <g v-for="p in visiblePoints" :key="p.r.instanceId">
+            <circle
+              class="graph-point"
+              :class="{ 'graph-point--incomplete': !p.isCompleted }"
+              :cx="p.x"
+              :cy="p.y"
+              :r="pointRadius"
+            />
+            <circle
+              v-if="hoverState && hoverState.r.instanceId === p.r.instanceId"
+              class="graph-point-hover-outline"
+              :cx="p.x"
+              :cy="p.y"
+              :r="pointRadius + 3"
+            />
+            <circle
+              v-if="hoverState && hoverState.r.instanceId === p.r.instanceId"
+              class="graph-point-hover-fill"
+              :cx="p.x"
+              :cy="p.y"
+              :r="pointRadius + 5"
+            />
+          </g>
+        </svg>
       </div>
       <teleport to="body">
         <div
@@ -212,10 +237,8 @@ function onSelect(r: ActivityReportDTO) {
   router.push(`/activityreport/${r.instanceId}`)
 }
 
-const graphEl = ref<HTMLElement | null>(null)
 const graphWrapperEl = ref<HTMLElement | null>(null)
-const canvasEl = ref<HTMLCanvasElement | null>(null)
-const devicePixelRatioRef = ref(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+const svgEl = ref<SVGSVGElement | null>(null)
 const hoverState = ref<null | {
   x: number
   y: number
@@ -247,10 +270,18 @@ const baseGraphWidth = computed(() =>
     : 0,
 )
 const wrapperWidth = ref(0)
+const scrollLeft = ref(0)
 const graphContentWidth = computed(() => baseGraphWidth.value)
 const displayGraphWidth = computed(() => {
   if (!wrapperWidth.value) return graphContentWidth.value
   return Math.max(graphContentWidth.value, wrapperWidth.value)
+})
+
+const visiblePoints = computed(() => {
+  if (!graphWrapperEl.value) return pointsPlottable.value
+  const startX = scrollLeft.value - pointRadius * 2
+  const endX = startX + graphWrapperEl.value.clientWidth + pointRadius * 4
+  return pointsPlottable.value.filter((p) => p.x >= startX && p.x <= endX)
 })
 
 const maxDeviation = computed(() => {
@@ -274,50 +305,6 @@ const pointsPlottable = computed(() =>
   }),
 )
 
-const canvasPixelWidth = computed(() =>
-  Math.max(1, Math.floor(displayGraphWidth.value * devicePixelRatioRef.value)),
-)
-const canvasPixelHeight = computed(() =>
-  Math.max(1, Math.floor(graphHeight * devicePixelRatioRef.value)),
-)
-
-function drawCanvas() {
-  const canvas = canvasEl.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const dpr = devicePixelRatioRef.value
-  ctx.reset?.()
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.save()
-  if (dpr !== 1) ctx.scale(dpr, dpr)
-  const pts = pointsPlottable.value
-  if (!pts.length) {
-    ctx.restore()
-    return
-  }
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i]
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, pointRadius, 0, Math.PI * 2)
-    ctx.fillStyle = p.isCompleted ? '#27ae60' : '#c0392b'
-    ctx.fill()
-  }
-  if (hoverState.value) {
-    const p = hoverState.value
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, pointRadius + 3, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
-    ctx.lineWidth = 2
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, pointRadius, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.15)'
-    ctx.fill()
-  }
-  ctx.restore()
-}
-
 interface PlotPoint {
   r: ActivityReportDTO
   x: number
@@ -326,28 +313,30 @@ interface PlotPoint {
   deviation: number
   isCompleted: boolean
 }
+
+const pointHitMargin = 0
+
 function findPointAt(x: number, y: number) {
   const pts: PlotPoint[] = pointsPlottable.value as PlotPoint[]
-  const r = pointRadius + 5
+  const r = pointRadius + pointHitMargin
   let hit: PlotPoint | null = null
-  let minDist = Infinity
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i]
     const dx = x - p.x
     const dy = y - p.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist <= r && dist < minDist) {
+    if (dist <= r) {
       hit = p
-      minDist = dist
+      break
     }
   }
   return hit
 }
 
-function handlePointerMove(ev: MouseEvent) {
-  const canvas = canvasEl.value
-  if (!canvas) return
-  const rect = canvas.getBoundingClientRect()
+function handleSvgPointerMove(ev: MouseEvent) {
+  const svg = svgEl.value
+  if (!svg) return
+  const rect = svg.getBoundingClientRect()
   const x = ev.clientX - rect.left
   const y = ev.clientY - rect.top
   const found = findPointAt(x, y)
@@ -363,15 +352,13 @@ function handlePointerMove(ev: MouseEvent) {
   } else {
     hoverState.value = null
   }
-  drawCanvas()
 }
 
-function handlePointerLeave() {
+function handleSvgPointerLeave() {
   hoverState.value = null
-  drawCanvas()
 }
 
-function handleClick() {
+function handleSvgClick() {
   if (hoverState.value) onSelect(hoverState.value.r)
 }
 
@@ -406,6 +393,7 @@ function updateEdgeState() {
   const el = graphWrapperEl.value
   const maxScroll = el.scrollWidth - el.clientWidth
   const sl = el.scrollLeft
+  scrollLeft.value = sl
   atLeftEdge.value = sl <= 1
   atRightEdge.value = maxScroll - sl <= 1
 }
@@ -413,7 +401,11 @@ function updateEdgeState() {
 async function scrollToRight() {
   await nextTick()
   if (!graphWrapperEl.value) return
-  graphWrapperEl.value.scrollLeft = graphWrapperEl.value.scrollWidth
+  requestAnimationFrame(() => {
+    if (!graphWrapperEl.value) return
+    graphWrapperEl.value.scrollLeft = graphWrapperEl.value.scrollWidth
+    updateEdgeState()
+  })
 }
 
 const isGraphComputing = ref(false)
@@ -423,7 +415,6 @@ function beginGraphCompute() {
   nextTick(() => {
     requestAnimationFrame(() => {
       isGraphComputing.value = false
-      drawCanvas()
     })
   })
 }
@@ -433,17 +424,13 @@ watch(pointsPlottable, async () => {
   await nextTick()
   updateScrollable()
   scrollToRight()
-  requestAnimationFrame(drawCanvas)
 })
 
 onMounted(async () => {
   beginGraphCompute()
+  await nextTick()
   updateScrollable()
-  scrollToRight()
-  const c = canvasEl.value
-  c?.addEventListener('mousemove', handlePointerMove)
-  c?.addEventListener('mouseleave', handlePointerLeave)
-  c?.addEventListener('click', handleClick)
+  await scrollToRight()
   graphWrapperEl.value?.addEventListener('scroll', updateEdgeState, { passive: true })
   window.addEventListener('resize', updateScrollable)
 })
@@ -455,7 +442,7 @@ watch(
       await nextTick()
       beginGraphCompute()
       updateScrollable()
-      scrollToRight()
+      await scrollToRight()
     }
   },
 )
@@ -463,10 +450,6 @@ watch(
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateScrollable)
   graphWrapperEl.value?.removeEventListener('scroll', updateEdgeState)
-  const c = canvasEl.value
-  c?.removeEventListener('mousemove', handlePointerMove)
-  c?.removeEventListener('mouseleave', handlePointerLeave)
-  c?.removeEventListener('click', handleClick)
 })
 </script>
 
@@ -660,26 +643,30 @@ onBeforeUnmount(() => {
 .graph-shell.fade-left.is-scrollable {
   mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-size), #000 100%);
 }
-.graph {
-  position: relative;
-}
-.graph__avg-line {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 100%;
-  height: 0;
-  border-top: 2px solid var(--color-border-strong, rgba(255, 255, 255, 0.45));
-  pointer-events: none;
-  z-index: 1;
-}
-.graph-canvas {
-  position: relative;
+.graph-svg {
   display: block;
-  z-index: 2;
 }
-.graph-canvas.is-hovering {
+.graph__avg-line-svg {
+  stroke: var(--color-border-strong, rgba(255, 255, 255, 0.45));
+  stroke-width: 2;
+}
+.graph-point {
+  fill: #27ae60;
   cursor: pointer;
+}
+.graph-point--incomplete {
+  fill: #c0392b;
+  cursor: pointer;
+}
+.graph-point-hover-outline {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.graph-point-hover-fill {
+  fill: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
 }
 .graph-tooltip {
   position: absolute;
