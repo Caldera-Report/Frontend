@@ -20,7 +20,7 @@
         </div>
         <component
           :is="recentCompletion ? 'router-link' : 'div'"
-          :to="recentCompletion ? `/activityreport/${recentCompletion.instanceId}` : undefined"
+          :to="recentCompletion ? `/activityreport/${recentCompletion.id}` : undefined"
           class="stat-block"
           :class="{ 'is-link': !!recentCompletion }"
           :title="recentCompletion ? dotTooltip(recentCompletion) : 'Recent completion'"
@@ -30,7 +30,7 @@
         </component>
         <component
           :is="fastestCompletion ? 'router-link' : 'div'"
-          :to="fastestCompletion ? `/activityreport/${fastestCompletion.instanceId}` : undefined"
+          :to="fastestCompletion ? `/activityreport/${fastestCompletion.id}` : undefined"
           class="stat-block"
           :class="{ 'is-link': !!fastestCompletion }"
           :title="fastestCompletion ? dotTooltip(fastestCompletion) : 'Fastest completion'"
@@ -76,7 +76,7 @@
             :x2="displayGraphWidth"
             :y2="graphHeight / 2"
           />
-          <g v-for="p in visiblePoints" :key="p.r.instanceId">
+          <g v-for="p in visiblePoints" :key="p.r.id">
             <circle
               class="graph-point"
               :class="{ 'graph-point--incomplete': !p.isCompleted }"
@@ -85,14 +85,14 @@
               :r="pointRadius"
             />
             <circle
-              v-if="hoverState && hoverState.r.instanceId === p.r.instanceId"
+              v-if="hoverState && hoverState.r.id === p.r.id"
               class="graph-point-hover-outline"
               :cx="p.x"
               :cy="p.y"
               :r="pointRadius + 3"
             />
             <circle
-              v-if="hoverState && hoverState.r.instanceId === p.r.instanceId"
+              v-if="hoverState && hoverState.r.id === p.r.id"
               class="graph-point-hover-fill"
               :cx="p.x"
               :cy="p.y"
@@ -153,12 +153,6 @@ function refreshReports() {
 
 defineExpose({ requestRefresh: refreshReports })
 
-const reportsSorted = computed(() =>
-  [...(reportList?.value?.reports ?? [])].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  ),
-)
-
 function parseDuration(raw: unknown): number {
   if (raw == null) return 0
   if (typeof raw === 'number') return raw
@@ -170,7 +164,11 @@ function parseDuration(raw: unknown): number {
   return h * 3600 + m * 60 + s
 }
 
-const completedReports = computed(() => reportsSorted.value.filter((r) => r.completed))
+const completedReports = computed(() => {
+  const reports = reportList.value?.reports ?? []
+  return reports.filter((r) => r.completed)
+})
+
 const totalClears = computed(() => completedReports.value.length)
 
 function formatDurationDetailed(seconds: number | undefined) {
@@ -184,17 +182,12 @@ function formatDurationDetailed(seconds: number | undefined) {
   return `${m}m ${ss}s`
 }
 
-const recentCompletion = computed(() => {
-  if (!completedReports.value.length) return undefined
-  return [...completedReports.value].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-  )[0]
-})
+const recentCompletion = computed(() => reportList.value?.recent ?? undefined)
 const recentDurationFormatted = computed(() =>
   formatDurationDetailed(parseDuration(recentCompletion.value?.duration)),
 )
 
-const fastestCompletion = computed(() => reportList.value?.best || undefined)
+const fastestCompletion = computed(() => reportList.value?.best ?? undefined)
 const fastestDurationFormatted = computed(() =>
   formatDurationDetailed(parseDuration(fastestCompletion.value?.duration)),
 )
@@ -234,7 +227,7 @@ function dotTooltip(r: ActivityReportDTO) {
 const router = useRouter()
 
 function onSelect(r: ActivityReportDTO) {
-  router.push(`/activityreport/${r.instanceId}`)
+  router.push(`/activityreport/${r.id}`)
 }
 
 const graphWrapperEl = ref<HTMLElement | null>(null)
@@ -249,12 +242,14 @@ const hoverState = ref<null | {
 }>(null)
 
 const durationDomain = computed(() => {
-  const source = reportsSorted.value
+  const source = reportList.value?.reports ?? []
   if (!source.length) return { min: 0, max: 0, avg: 0 }
   const min = Math.min(...source.map((r) => parseDuration(r.duration)))
   const max = Math.max(...source.map((r) => parseDuration(r.duration)))
   const avgSource = completedReports.value.length ? completedReports.value : source
-  const avg = avgSource.reduce((s, r) => s + parseDuration(r.duration), 0) / avgSource.length || 0
+  const avg =
+    avgSource.reduce((s: number, r: ActivityReportDTO) => s + parseDuration(r.duration), 0) /
+      avgSource.length || 0
   return { min, max, avg }
 })
 
@@ -265,8 +260,8 @@ const pointSpacing = 22
 const leftOffset = pointRadius + 10
 const rightOffset = pointRadius + 5
 const baseGraphWidth = computed(() =>
-  reportsSorted.value.length
-    ? leftOffset + (reportsSorted.value.length - 1) * pointSpacing + rightOffset
+  reportList.value?.reports?.length
+    ? leftOffset + (reportList.value.reports.length - 1) * pointSpacing + rightOffset
     : 0,
 )
 const wrapperWidth = ref(0)
@@ -285,14 +280,16 @@ const visiblePoints = computed(() => {
 })
 
 const maxDeviation = computed(() => {
-  if (!reportsSorted.value.length) return 0
+  const source = reportList.value?.reports ?? []
+  if (!source.length) return 0
   const avg = durationDomain.value.avg
-  const deviations = reportsSorted.value.map((r) => Math.abs(parseDuration(r.duration) - avg))
+  const deviations = source.map((r) => Math.abs(parseDuration(r.duration) - avg))
   return Math.max(...deviations, 1)
 })
 
-const pointsPlottable = computed(() =>
-  reportsSorted.value.map((r, idx) => {
+const pointsPlottable = computed(() => {
+  const source = reportList.value?.reports ?? []
+  return source.map((r, idx) => {
     const duration = parseDuration(r.duration)
     const avg = durationDomain.value.avg || 0
     const deviation = duration - avg
@@ -302,8 +299,8 @@ const pointsPlottable = computed(() =>
     const y = centerY + normalized * amplitude
     const x = leftOffset + idx * pointSpacing
     return { r, x, y, duration, deviation, isCompleted: r.completed }
-  }),
-)
+  })
+})
 
 interface PlotPoint {
   r: ActivityReportDTO
