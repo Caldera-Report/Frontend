@@ -6,7 +6,6 @@ export interface OpTypeDTO {
 
 export interface ActivityReportDTO {
   id: string
-  instanceId: string
   date: Date
   playerId: string
   activityId: string
@@ -19,6 +18,7 @@ export interface ActivityReportListDTO {
   reports: ActivityReportDTO[]
   average: string
   best: ActivityReportDTO | null
+  recent: ActivityReportDTO | null
 }
 
 export interface ActivityDTO {
