@@ -33,7 +33,7 @@ export async function updatePlayerActivityReports(playerId: string): Promise<Act
 
 export async function getLeaderboard(
   activityId: string,
-  type: string,
+  type: number,
   count?: number,
   offset?: number,
 ): Promise<LeaderboardResponse[]> {
@@ -44,16 +44,15 @@ export async function getLeaderboard(
   const query = params.toString()
   const suffix = query ? `?${query}` : ''
 
-  return calderaGet<LeaderboardResponse[]>(`/activities/leaderboards/${type}/${activityId}${suffix}`)
+  return calderaGet<LeaderboardResponse[]>(`/leaderboards/${type}/${activityId}${suffix}`)
 }
 
 export async function searchLeaderboard(
   activityId: string,
-  type: string,
+  type: number,
   playerName: string,
 ): Promise<LeaderboardResponse[]> {
-  return calderaPost<LeaderboardResponse[]>(
-    `/activities/leaderboards/${type}/${activityId}/search`,
-    { playerName },
-  )
+  return calderaPost<LeaderboardResponse[]>(`leaderboards/${type}/${activityId}/search`, {
+    playerName,
+  })
 }

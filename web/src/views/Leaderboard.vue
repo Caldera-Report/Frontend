@@ -145,6 +145,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAllActivities, useLeaderboard, useSearchLeaderboard } from '@/hooks'
+import type { LeaderboardType } from '@/hooks'
 import type { LeaderboardResponse, PlayerDTO } from '@/api/models'
 import { showGlobalError } from '@/hooks/useGlobalError'
 import { debounce } from 'vuetify/lib/util/helpers.mjs'
@@ -161,11 +162,18 @@ const leaderboardTypeItems = [
   { label: 'Score', value: 'score' },
 ]
 
+const leaderboardTypeIds: Record<LeaderboardType, 0 | 1 | 2> = {
+  speed: 0,
+  completions: 1,
+  score: 2,
+}
+
 const selectedType = ref<'completions' | 'speed' | 'score'>(
   (props.type as string) && ['completions', 'speed', 'score'].includes(props.type!)
     ? (props.type as 'completions' | 'speed' | 'score')
     : 'completions',
 )
+const selectedTypeId = computed(() => leaderboardTypeIds[selectedType.value])
 
 const {
   data: opTypes,
@@ -235,7 +243,7 @@ const count = ref(PAGE_SIZE)
 const offset = ref(0)
 const hasMore = ref(true)
 
-const leaderboardQuery = useLeaderboard(selectedType, selectedActivityId, count, offset)
+const leaderboardQuery = useLeaderboard(selectedTypeId, selectedActivityId, count, offset)
 const activeQuery = computed(() => leaderboardQuery)
 
 const searchMutation = useSearchLeaderboard()
@@ -305,7 +313,7 @@ const triggerSearch = debounce(async () => {
     return
   }
   const data = await searchMutation.mutateAsync({
-    type: selectedType.value,
+    type: selectedTypeId.value,
     activityId: selectedActivityId.value,
     playerName: term,
   })
