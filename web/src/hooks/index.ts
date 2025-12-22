@@ -26,7 +26,7 @@ export const useSearchPlayer = () => {
 
 export const useSearchLeaderboard = () => {
   return useMutation({
-    mutationFn: (payload: { type: LeaderboardType; activityId: string; playerName: string }) =>
+    mutationFn: (payload: { type: LeaderboardTypeId; activityId: string; playerName: string }) =>
       searchLeaderboard(payload.activityId, payload.type, payload.playerName),
     retry: 1,
   })
@@ -124,12 +124,13 @@ export const useDestinyActivity = (activityId: number | Ref<number>) => {
 }
 
 export type LeaderboardType = 'completions' | 'speed' | 'score'
+export type LeaderboardTypeId = 0 | 1 | 2
 export interface BaseLeaderboardEntry {
   player: PlayerDTO
 }
 
 export const useLeaderboard = (
-  typeRef: Ref<LeaderboardType>,
+  typeRef: Ref<LeaderboardTypeId>,
   activityId: string | Ref<string>,
   count: number | Ref<number>,
   offset: number | Ref<number>,
