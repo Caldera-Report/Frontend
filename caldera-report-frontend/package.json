@@ -1,0 +1,33 @@
+{
+  "name": "caldera-report-frontend",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "api:gen": "openapi-typescript http://localhost:5207/swagger/v1/swagger.json -o api/internal/openapi.ts && openapi-typescript https://raw.githubusercontent.com/Bungie-net/api/master/openapi.json -o api/bungie/openapi.ts"
+  },
+  "dependencies": {
+    "@nuxt/eslint": "^1.12.1",
+    "@nuxt/icon": "^2.1.1",
+    "@nuxt/image": "^2.0.0",
+    "@primeuix/themes": "^2.0.2",
+    "@tailwindcss/vite": "^4.1.18",
+    "eslint": "^9.39.2",
+    "nuxt": "^4.2.2",
+    "openapi-fetch": "^0.15.0",
+    "openapi-typescript-fetch": "^2.2.1",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.4",
+    "tailwindcss": "^4.1.18",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@primevue/nuxt-module": "^4.5.4",
+    "openapi-typescript": "^7.10.1"
+  }
+}
